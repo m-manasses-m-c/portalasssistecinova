@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="color-scheme" content="light"> 
+    <title>Assistec Inova - Portal de Adesão 2025</title>
+    
+    <!-- Bibliotecas Externas -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    
+    <!-- Ícones e Fontes -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Outfit:wght@500;700;800&display=swap" rel="stylesheet">
+
+    <!-- Configurações Locais -->
+    <script src="js/config.js"></script>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body class="text-slate-700 antialiased min-h-screen flex flex-col bg-slate-50">
+
+    <div id="app" class="relative min-h-screen flex flex-col">
+
+        <!-- Aviso de Cookies -->
+        <transition name="fade">
+            <div v-if="!cookiesAccepted" class="fixed bottom-4 left-4 right-4 md:left-auto md:right-4 md:w-96 bg-white shadow-2xl rounded-2xl border border-slate-100 p-5 z-50 animate-fade-in-up">
+                <div class="flex items-start gap-3">
+                    <i class="fa-solid fa-cookie-bite text-yellow-500 text-xl mt-1"></i>
+                    <div>
+                        <p class="text-sm text-slate-600 mb-3">Utilizamos armazenamento local para melhorar sua experiência e salvar seu progresso.</p>
+                        <button @click="acceptCookies" class="bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold py-2 px-4 rounded-lg transition w-full">
+                            Entendi e Aceito
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </transition>
+
+        <!-- Navbar Principal -->
+        <nav class="w-full py-4 px-6 flex justify-between items-center z-40">
+            <div class="flex items-center gap-3">
+                <div class="bg-white p-2 rounded-xl shadow-sm border border-slate-100">
+                    <img src="https://images.even3.com/dsbYl5oP6soFkxgNSkt7fz3qmKo=/fit-in/250x250/smart/https://static.even3.com/logos/logo.738e2a58735c4796ade6.png" class="h-8 w-auto">
+                </div>
+                
+            </div>
+            
+            <a href="portal.html" class="text-xs font-semibold text-brand bg-brand/5 border border-brand/20 hover:bg-brand hover:text-white transition px-4 py-2.5 rounded-full shadow-sm flex items-center gap-2">
+                <i class="fa-solid fa-user-check"></i> <span class="hidden md:inline">Já sou Participante</span>
+            </a>
+        </nav>
+
+        <!-- Conteúdo Principal -->
+        <main class="flex-grow container mx-auto px-4 py-2 max-w-4xl relative z-10 mb-10">
+            
+            <!-- VIEW: Formulário de Adesão -->
+            <div v-if="currentView === 'form'" class="glass-panel rounded-3xl shadow-2xl shadow-indigo-900/10 overflow-hidden animate-fade-in-up">
+                
+                <!-- Botão Voltar -->
+                <a href="index.html" class="absolute top-4 left-4 z-20 bg-white/20 hover:bg-white/30 text-white p-2 rounded-full backdrop-blur-sm transition">
+                    <i class="fa-solid fa-arrow-left"></i>
+                </a>
+
+                <!-- Cabeçalho do Formulário -->
+                <div class="bg-gradient-to-r from-slate-900 to-slate-800 p-8 md:p-10 relative overflow-hidden">
+                    <div class="absolute top-0 right-0 -mt-10 -mr-10 w-64 h-64 bg-brand rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-pulse-slow"></div>
+                    <div class="absolute bottom-0 left-0 -mb-10 -ml-10 w-64 h-64 bg-accent rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-pulse-slow"></div>
+                    
+                    <div class="relative z-10 text-center">
+                        <span class="inline-block py-1 px-3 rounded-full bg-white/10 border border-white/20 text-blue-100 text-[10px] font-bold uppercase tracking-wider mb-3">{{ badgeText }}</span>
+                        <h1 class="font-display text-xl md:text-2xl font-bold text-white mb-2 tracking-tight">{{ formTitle }}</h1>
+                        <p class="text-slate-300 text-sm md:text-base max-w-lg mx-auto leading-relaxed">
+                            {{ formDescription || 'Preencha os dados abaixo para oficializar a participação dos campi da sua instituição no programa.' }}
+                        </p>
+                    </div>
+                </div>
+
+                <form @submit.prevent="submitForm" class="p-6 md:p-10 space-y-8 bg-white">
+                    
+                    <!-- Seção 1: Identificação -->
+                    <div class="space-y-4">
+                        <h3 class="text-sm font-bold text-slate-400 uppercase tracking-wider border-b border-slate-100 pb-2">Seus Dados</h3>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+                            <div class="input-group relative">
+                                <label class="block text-xs font-semibold text-slate-600 mb-1.5 ml-1">Nome Completo</label>
+                                <div class="relative">
+                                    <i class="fa-regular fa-user absolute left-4 top-3.5 text-slate-400 transition-colors duration-200"></i>
+                                    <input v-model="form.name" required type="text" class="w-full pl-10 pr-4 py-3 bg-slate-50 rounded-xl border border-slate-200 outline-none transition-all duration-200 focus:border-brand focus:ring-4 focus:ring-brand/10 text-slate-700 font-medium placeholder-slate-400" placeholder="Seu nome">
+                                </div>
+                            </div>
+                            <div class="input-group relative">
+                                <label class="block text-xs font-semibold text-slate-600 mb-1.5 ml-1">E-mail Institucional</label>
+                                <div class="relative">
+                                    <i class="fa-regular fa-envelope absolute left-4 top-3.5 text-slate-400 transition-colors duration-200"></i>
+                                    <input v-model="form.email" required type="email" class="w-full pl-10 pr-4 py-3 bg-slate-50 rounded-xl border border-slate-200 outline-none transition-all duration-200 focus:border-brand focus:ring-4 focus:ring-brand/10 text-slate-700 font-medium placeholder-slate-400" placeholder="seu.email@inst.edu.br">
+                                </div>
+                            </div>
+                            <div class="input-group relative md:col-span-2">
+                                <label class="block text-xs font-semibold text-slate-600 mb-1.5 ml-1">Celular / WhatsApp</label>
+                                <div class="relative">
+                                    <i class="fa-solid fa-mobile-screen absolute left-4 top-3.5 text-slate-400 transition-colors duration-200"></i>
+                                    <input v-model="form.cellphone" required type="tel" class="w-full pl-10 pr-4 py-3 bg-slate-50 rounded-xl border border-slate-200 outline-none transition-all duration-200 focus:border-brand focus:ring-4 focus:ring-brand/10 text-slate-700 font-medium placeholder-slate-400" placeholder="(00) 00000-0000">
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="bg-slate-50 p-5 rounded-xl border border-slate-100 mt-4">
+                            <div class="flex items-center gap-3">
+                                <div class="relative flex items-center">
+                                    <input type="checkbox" id="isKeyContact" v-model="form.isKeyContact" class="w-5 h-5 text-brand rounded border-gray-300 focus:ring-brand transition cursor-pointer">
+                                </div>
+                                <label for="isKeyContact" class="text-sm font-medium text-slate-700 cursor-pointer select-none">
+                                    Eu sou o <strong>contato chave</strong> para comunicação oficial deste projeto.
+                                </label>
+                            </div>
+
+                            <div v-if="!form.isKeyContact" class="mt-5 pt-5 border-t border-slate-200 animate-fade-in-up">
+                                <p class="text-xs text-orange-600 font-bold mb-4 flex items-center gap-2">
+                                    <i class="fa-solid fa-circle-exclamation"></i> Informe os dados do responsável pelo projeto:
+                                </p>
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+                                    <div class="input-group relative">
+                                        <label class="block text-xs font-semibold text-slate-600 mb-1.5 ml-1">Nome do Responsável</label>
+                                        <div class="relative">
+                                            <i class="fa-solid fa-user-tie absolute left-4 top-3.5 text-slate-400"></i>
+                                            <input v-model="form.keyContactName" type="text" class="w-full pl-10 pr-4 py-3 bg-white rounded-xl border border-slate-200 outline-none focus:border-brand focus:ring-4 focus:ring-brand/10 transition-all" placeholder="Nome completo">
+                                        </div>
+                                    </div>
+                                    <div class="input-group relative">
+                                        <label class="block text-xs font-semibold text-slate-600 mb-1.5 ml-1">E-mail do Responsável</label>
+                                        <div class="relative">
+                                            <i class="fa-solid fa-at absolute left-4 top-3.5 text-slate-400"></i>
+                                            <input v-model="form.keyContactEmail" type="email" class="w-full pl-10 pr-4 py-3 bg-white rounded-xl border border-slate-200 outline-none focus:border-brand focus:ring-4 focus:ring-brand/10 transition-all" placeholder="Email principal">
+                                        </div>
+                                    </div>
+                                    <div class="input-group relative md:col-span-2">
+                                        <label class="block text-xs font-semibold text-slate-600 mb-1.5 ml-1">Celular do Responsável</label>
+                                        <div class="relative">
+                                            <i class="fa-solid fa-phone absolute left-4 top-3.5 text-slate-400"></i>
+                                            <input v-model="form.keyContactCellphone" type="tel" class="w-full pl-10 pr-4 py-3 bg-white rounded-xl border border-slate-200 outline-none focus:border-brand focus:ring-4 focus:ring-brand/10 transition-all" placeholder="(00) 00000-0000">
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Seção 2: Instituição (ICT) -->
+                    <div class="space-y-4">
+                        <h3 class="text-sm font-bold text-slate-400 uppercase tracking-wider border-b border-slate-100 pb-2">Instituição (ICT)</h3>
+                        <div class="input-group relative">
+                            <div class="relative">
+                                <i class="fa-solid fa-building-columns absolute left-4 top-3.5 text-slate-400 transition-colors duration-200 z-10"></i>
+                                <input 
+                                    :value="searchIct"
+                                    @input="searchIct = $event.target.value"
+                                    @focus="showIctDropdown = true"
+                                    @blur="delayHideIct"
+                                    type="text" 
+                                    class="w-full pl-10 pr-10 py-3 bg-slate-50 rounded-xl border border-slate-200 outline-none transition-all duration-200 text-slate-700 font-medium focus:border-brand focus:ring-4 focus:ring-brand/10" 
+                                    :class="{'bg-blue-50/50 border-brand/30 text-brand': !!form.ict}"
+                                    placeholder="Busque pela sigla ou nome..."
+                                    :disabled="!!form.ict"
+                                    autocomplete="off"
+                                >
+                                <button v-if="form.ict" type="button" @click="resetIctSelection" class="absolute right-3 top-2.5 text-slate-400 hover:text-red-500 bg-white p-1 rounded-md shadow-sm transition-colors border border-slate-100">
+                                    <i class="fa-solid fa-times text-xs"></i>
+                                </button>
+                                <i v-else class="fa-solid fa-chevron-down absolute right-4 top-4 text-slate-300 text-xs pointer-events-none"></i>
+
+                                <!-- Dropdown ICT -->
+                                <div v-if="showIctDropdown && !form.ict" class="absolute z-30 w-full mt-2 bg-white rounded-xl shadow-xl border border-slate-100 overflow-hidden animate-fade-in-up origin-top">
+                                    <ul class="max-h-60 overflow-y-auto">
+                                        <li v-for="ict in filteredIcts" :key="ict" @mousedown.prevent="selectIct(ict)" class="px-4 py-3 hover:bg-brand/5 cursor-pointer text-slate-600 hover:text-brand border-b border-slate-50 last:border-0 text-sm transition-colors flex items-center gap-2">
+                                            <div class="w-1.5 h-1.5 rounded-full bg-slate-300"></div> {{ ict }}
+                                        </li>
+                                        <li v-if="filteredIcts.length === 0" class="px-4 py-4 text-center text-slate-400 text-sm">Nenhuma ICT encontrada.</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Seção 3: Seleção de Campi -->
+                    <div class="space-y-4" :class="{'opacity-60 grayscale pointer-events-none select-none': !form.ict}">
+                        <div class="flex flex-col md:flex-row md:items-end justify-between gap-2 border-b border-slate-100 pb-2">
+                            <h3 class="text-sm font-bold text-slate-400 uppercase tracking-wider">Seleção de Campi</h3>
+                            <span v-if="form.ict" class="text-xs font-medium text-brand bg-brand/10 px-2 py-1 rounded-md">
+                                <i class="fa-solid fa-check-circle mr-1"></i> {{ form.ict }}
+                            </span>
+                        </div>
+
+                        <div class="relative group">
+                            <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                                <i class="fa-solid fa-search text-brand/50 group-focus-within:text-brand transition-colors"></i>
+                            </div>
+                            <input 
+                                :value="searchCampus"
+                                @input="searchCampus = $event.target.value"
+                                @focus="showCampusDropdown = true"
+                                @blur="delayHideCampus"
+                                @keydown.enter.prevent="tryAddFirstMatch"
+                                type="text" 
+                                class="w-full pl-11 pr-4 py-4 rounded-xl border-2 border-slate-200 bg-white focus:border-brand focus:ring-4 focus:ring-brand/10 outline-none shadow-sm transition-all duration-300 text-lg placeholder-slate-400" 
+                                placeholder="Digite o nome do campus..."
+                                :disabled="!form.ict"
+                                autocomplete="off"
+                            >
+                            
+                            <!-- Dropdown Campus -->
+                            <div v-if="showCampusDropdown && filteredAvailableCampi.length > 0" class="absolute z-20 w-full mt-2 bg-white rounded-xl shadow-2xl border border-slate-100 overflow-hidden animate-fade-in-up origin-top">
+                                <ul class="max-h-60 overflow-y-auto">
+                                    <li 
+                                        v-for="campus in filteredAvailableCampi" 
+                                        :key="campus.id" 
+                                        @mousedown.prevent="addCampus(campus)" 
+                                        class="px-5 py-3.5 hover:bg-green-50 cursor-pointer flex justify-between items-center border-b border-slate-50 last:border-0 group/item transition-colors"
+                                    >
+                                        <span class="text-slate-700 font-medium group-hover/item:text-green-700">{{ campus.name }}</span>
+                                        <i class="fa-solid fa-plus text-slate-300 group-hover/item:text-green-600 transition-colors"></i>
+                                    </li>
+                                </ul>
+                            </div>
+                        </div>
+
+                        <!-- Lista de Campi Selecionados -->
+                        <div class="min-h-[120px] bg-slate-50/50 rounded-2xl p-4 border border-slate-200/60 dashed-border relative">
+                            <div v-if="form.selectedCampi.length === 0" class="absolute inset-0 flex flex-col items-center justify-center text-slate-300 pointer-events-none">
+                                <i class="fa-solid fa-map-location-dot text-3xl mb-2 opacity-50"></i>
+                                <span class="text-sm">Nenhum campus adicionado ainda.</span>
+                            </div>
+
+                            <transition-group name="list" tag="div" class="grid grid-cols-1 md:grid-cols-2 gap-3 relative z-10">
+                                <div v-for="(item, index) in form.selectedCampi" :key="item.id" class="bg-white p-3.5 rounded-xl shadow-sm border border-slate-100 flex justify-between items-center group hover:-translate-y-1 transition-transform duration-300 hover:shadow-md hover:border-brand/20">
+                                    <div class="flex items-center gap-3 overflow-hidden">
+                                        <div class="w-8 h-8 rounded-lg bg-brand/10 text-brand flex items-center justify-center flex-shrink-0">
+                                            <i class="fa-solid fa-school text-xs"></i>
+                                        </div>
+                                        <p class="font-semibold text-slate-700 text-sm truncate">{{ item.name }}</p>
+                                    </div>
+                                    <button type="button" @click="removeCampus(index)" class="w-8 h-8 flex items-center justify-center rounded-full hover:bg-red-50 text-slate-300 hover:text-red-500 transition-colors">
+                                        <i class="fa-solid fa-trash-can text-sm"></i>
+                                    </button>
+                                </div>
+                            </transition-group>
+                        </div>
+                    </div>
+
+                    <div class="pt-4">
+                        <button 
+                            type="submit" 
+                            :disabled="loading"
+                            class="w-full relative overflow-hidden bg-gradient-to-r from-brand to-indigo-600 hover:from-indigo-500 hover:to-brandLight text-white font-bold py-4 rounded-xl shadow-lg hover:shadow-indigo-500/30 transform hover:scale-[1.01] transition-all duration-300 disabled:opacity-70 disabled:cursor-not-allowed group"
+                        >
+                            <span v-if="loading" class="flex items-center justify-center gap-2">
+                                <i class="fa-solid fa-circle-notch fa-spin"></i> Processando...
+                            </span>
+                            <span v-else class="flex items-center justify-center gap-2 text-lg tracking-wide">
+                                Confirmar Adesão <i class="fa-solid fa-arrow-right group-hover:translate-x-1 transition-transform"></i>
+                            </span>
+                        </button>
+                    </div>
+                </form>
+
+                <div class="bg-slate-50 border-t border-slate-200 px-8 py-4 flex items-center justify-center gap-2 text-xs text-slate-400">
+                    <i class="fa-solid fa-lock"></i> Seus dados estão seguros e criptografados.
+                </div>
+            </div>
+
+            <!-- VIEW: Sucesso -->
+            <div v-else-if="currentView === 'success'" class="bg-white rounded-3xl shadow-xl p-10 text-center animate-fade-in-up max-w-2xl mx-auto mt-10">
+                <div class="w-24 h-24 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6">
+                    <i class="fa-solid fa-check text-4xl text-green-600"></i>
+                </div>
+                <h2 class="font-display text-3xl font-bold text-slate-800 mb-2">Registro Enviado!</h2>
+                
+                <div v-if="successData.accessKey">
+                    <p v-if="successData.isNew" class="text-slate-500 mb-4 leading-relaxed">Sua instituição foi registrada com sucesso. Geramos uma chave de acesso única para você gerenciar os períodos de indisponibilidade.</p>
+                    <p v-else class="text-slate-500 mb-4 leading-relaxed">Sua submissão foi registrada. Detectamos que sua instituição já possui uma chave de acesso. Utilize a chave abaixo para gerenciar os períodos.</p>
+                    
+                    <p class="text-sm font-bold text-slate-500 uppercase">Sua chave de acesso ao portal:</p>
+                    <div class="my-4 inline-flex items-center gap-3 bg-slate-100 p-4 rounded-xl border border-slate-200">
+                        <span class="font-mono text-2xl font-bold text-brand tracking-widest">{{ successData.accessKey }}</span>
+                        <button @click="copyToClipboard(successData.accessKey)" class="w-10 h-10 rounded-lg bg-white shadow-sm border border-slate-200 text-slate-500 hover:text-brand hover:bg-brand/5 transition">
+                            <i class="fa-regular fa-copy"></i>
+                        </button>
+                    </div>
+                    <p class="text-xs text-slate-400 max-w-md mx-auto">Guarde esta chave em um local seguro. Você precisará dela para acessar o portal do participante.</p>
+                </div>
+
+                <div class="mt-8 flex justify-center gap-4">
+                    <a href="portal.html" class="bg-brand hover:bg-brandDark text-white font-bold py-3 px-8 rounded-xl transition-colors">
+                        Acessar Portal do Participante
+                    </a>
+                    <button @click="currentView = 'form'; resetForm()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-3 px-8 rounded-xl transition-colors">
+                        Fazer novo registro
+                    </button>
+                </div>
+            </div>
+
+        </main>
+        
+        <!-- Footer Restaurado -->
+        <footer class="mt-auto py-8 border-t border-slate-200/60 bg-white/40 backdrop-blur-sm relative z-10">
+            <div class="container mx-auto px-4 flex flex-col items-center justify-center gap-5">
+                <img 
+                    src="https://www.gov.br/transferegov/pt-br/noticias/noticias/arquivos-e-imagens/mec.png/@@images/cfa8ccbe-9bb0-4e89-8cc4-d76db9608ffd.png" 
+                    alt="Logo Parceiros" 
+                    class="h-16 md:h-20 w-auto object-contain opacity-80 hover:opacity-100 transition duration-300 mix-blend-multiply"
+                >
+                <div class="text-center">
+                    <p class="text-slate-500 text-xs font-medium tracking-wide">
+                        © 2025 Assistec Inova- Todos os direitos reservados.
+                    </p>
+                </div>
+            </div>
+        </footer>
+    </div>
+    
+    <!-- Scripts -->
+    <script src="js/app.js"></script>
+</body>
+</html>
