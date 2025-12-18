@@ -1,0 +1,1176 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Assistec Inova - Portal do Participante</title>
+    
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Outfit:wght@500;700;800&display=swap" rel="stylesheet">
+    
+    <script src="js/config.js"></script>
+    <link rel="stylesheet" href="css/style.css">
+
+    <!-- FIX 1: Add v-cloak style to hide content before Vue loads -->
+    <style>
+        [v-cloak] { display: none !important; }
+    </style>
+</head>
+<body class="bg-slate-100 text-slate-700 font-sans">
+
+    <!-- FIX 2: Add v-cloak attribute here -->
+    <div id="portalApp" class="min-h-screen flex flex-col" v-cloak>
+        
+        <!-- Navbar Minimalista -->
+        <nav class="bg-white border-b border-slate-200 px-6 py-4 flex justify-between items-center">
+            <a v-if="currentView === 'login'" href="index.html" class="text-sm font-medium text-slate-500 hover:text-brand">Voltar ao site</a>
+            
+            <div v-else class="flex items-center gap-4 ml-auto">
+                <div class="text-right hidden md:block">
+                    <p class="text-sm font-bold text-slate-700">{{ currentView === 'dashboard' ? currentUser?.name : (specialist ? specialist.name : '') }}</p>
+                    <p class="text-xs text-slate-500">{{ currentView === 'dashboard' ? currentUser?.ict : 'Especialista' }}</p>
+                </div>
+                <button @click="logout" class="text-sm text-red-500 hover:text-red-700 font-bold flex items-center gap-2">
+                    <i class="fa-solid fa-power-off"></i> Sair
+                </button>
+            </div>
+        </nav>
+
+        <main class="flex-grow container mx-auto px-4 py-8 relative">
+
+            <!-- VIEW: Login -->
+            <div v-if="currentView === 'login'" class="max-w-md mx-auto mt-12 animate-fade-in-up">
+                <div class="bg-white rounded-2xl shadow-xl overflow-hidden">
+                    <div class="bg-slate-900 p-8 text-center relative transition-colors duration-500" :class="loginMode === 'specialist' ? 'bg-slate-800' : 'bg-slate-900'">
+                        <div class="absolute top-0 right-0 w-32 h-32 bg-brand rounded-full mix-blend-overlay filter blur-3xl opacity-20"></div>
+                        <i class="fa-solid text-4xl text-white/90 mb-4" :class="loginMode === 'specialist' ? 'fa-user-tie' : 'fa-key'"></i>
+                        <h2 class="text-xl font-bold text-white">{{ loginMode === 'specialist' ? 'Portal do Especialista' : 'Acesso Restrito' }}</h2>
+                        <p class="text-slate-400 text-sm mt-1">{{ loginMode === 'specialist' ? 'Acesso para consultores e especialistas' : 'Utilize sua chave institucional' }}</p>
+                    </div>
+                    
+                    <!-- Toggle de Tipo de Acesso -->
+                    <div class="px-8 pt-6">
+                        <div class="flex bg-slate-100 p-1 rounded-lg">
+                            <button @click="loginMode = 'institution'" :class="loginMode === 'institution' ? 'bg-white shadow text-slate-800' : 'text-slate-500 hover:text-slate-700'" class="flex-1 py-2 rounded-md text-sm font-bold transition">Instituição</button>
+                            <button @click="loginMode = 'specialist'" :class="loginMode === 'specialist' ? 'bg-white shadow text-slate-800' : 'text-slate-500 hover:text-slate-700'" class="flex-1 py-2 rounded-md text-sm font-bold transition">Especialista</button>
+                        </div>
+                    </div>
+
+                    <form @submit.prevent="loginWithKey" class="p-8 pt-4 space-y-6">
+                        <div>
+                            <label class="block text-xs font-bold text-slate-500 uppercase mb-2">Chave de Acesso</label>
+                            <input v-model="accessKey" type="text" :placeholder="loginMode === 'specialist' ? 'Ex: SPEC-X7Z9' : 'Ex: IFSP-A1B2'" class="w-full text-center text-lg font-mono uppercase tracking-widest px-4 py-3 bg-slate-50 border-2 border-slate-200 rounded-xl focus:border-brand focus:ring-4 focus:ring-brand/10 outline-none transition" required>
+                            <p v-if="loginError" class="text-red-500 text-xs mt-2 text-center font-bold"><i class="fa-solid fa-circle-exclamation"></i> Chave não encontrada.</p>
+                        </div>
+                        <button type="submit" :disabled="loading" class="w-full bg-brand hover:bg-brandDark text-white font-bold py-3 rounded-xl shadow-lg shadow-brand/20 transition">
+                            <span v-if="loading">Verificando...</span>
+                            <span v-else>Entrar</span>
+                        </button>
+                    </form>
+                </div>
+                <div class="text-center mt-6 text-xs text-slate-400">
+                    Não tem a chave? Contate a administração do programa.
+                </div>
+            </div>
+
+            <!-- VIEW: Dashboard -->
+            <div v-else-if="currentView === 'dashboard'" class="animate-fade-in-up">
+                
+                <header class="mb-8">
+                    <div class="flex items-center gap-2 mb-2">
+                        <span class="bg-green-100 text-green-700 px-2 py-0.5 rounded text-[10px] font-bold uppercase">Logado</span>
+                        <span v-if="currentForm" class="bg-brand/10 text-brand px-2 py-0.5 rounded text-[10px] font-bold uppercase border border-brand/20">{{ currentForm.category || currentForm.badge_text }}</span>
+                    </div>
+                    <h1 class="text-2xl md:text-3xl font-display font-bold text-slate-900">{{ currentUser.ict }}</h1>
+                    <p class="text-slate-500">Representante: {{ currentUser.name }} <span v-if="currentForm" class="mx-2 text-slate-300">|</span> <span v-if="currentForm" class="text-slate-400">{{ currentForm.title }}</span></p>
+                </header>
+
+                <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
+                    <!-- Sidebar -->
+                    <div class="lg:col-span-1 space-y-4">
+                        <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                            <div class="p-3 bg-slate-50 border-b border-slate-100 text-xs font-bold text-slate-400 uppercase">Menu</div>
+                            <a href="#" @click.prevent="activeTab = 'calendar'" :class="{'bg-brand/5 text-brand font-bold border-l-4 border-brand': activeTab === 'calendar', 'text-slate-600 hover:bg-slate-50 border-l-4 border-transparent': activeTab !== 'calendar'}" class="block px-4 py-3 text-sm transition">
+                                <i class="fa-regular fa-calendar-check mr-2"></i> Cronograma
+                            </a>
+                            <a href="#" @click.prevent="activeTab = 'team'" :class="{'bg-brand/5 text-brand font-bold border-l-4 border-brand': activeTab === 'team', 'text-slate-600 hover:bg-slate-50 border-l-4 border-transparent': activeTab !== 'team'}" class="block px-4 py-3 text-sm transition">
+                                <i class="fa-solid fa-users mr-2"></i> Equipe
+                            </a>
+                            <a href="#" @click.prevent="activeTab = 'documents'" :class="{'bg-brand/5 text-brand font-bold border-l-4 border-brand': activeTab === 'documents', 'text-slate-600 hover:bg-slate-50 border-l-4 border-transparent': activeTab !== 'documents'}" class="block px-4 py-3 text-sm transition">
+                                <i class="fa-solid fa-folder-open mr-2"></i> Documentos
+                            </a>
+                            <a href="#" @click.prevent="activeTab = 'community'" :class="{'bg-brand/5 text-brand font-bold border-l-4 border-brand': activeTab === 'community', 'text-slate-600 hover:bg-slate-50 border-l-4 border-transparent': activeTab !== 'community'}" class="block px-4 py-3 text-sm transition">
+                                <i class="fa-solid fa-comments mr-2"></i> Comunidade <span class="bg-red-500 text-white text-[9px] px-1.5 py-0.5 rounded-full ml-1">Novo</span>
+                            </a>
+                            <a href="#" @click.prevent="showReportModal = true" class="block px-4 py-3 text-slate-600 hover:bg-slate-50 text-sm transition border-l-4 border-transparent">
+                                <i class="fa-solid fa-chart-line mr-2"></i> Relatórios
+                            </a>
+                        </div>
+                        <div class="bg-blue-50 text-blue-800 p-4 rounded-xl text-xs border border-blue-100 leading-relaxed">
+                            <strong>Atenção:</strong> Preencha as datas de recesso e férias de cada campus para garantir o alinhamento das atividades.
+                        </div>
+                    </div>
+
+                    <!-- Main Area -->
+                    <div class="lg:col-span-3">
+                        <!-- TAB: Calendar -->
+                        <div v-if="activeTab === 'calendar'" class="space-y-6 animate-fade-in-up">
+                        <!-- Calendário Visual -->
+                        <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+                            <div class="flex justify-between items-center mb-6 border-b border-slate-100 pb-4">
+                                <h3 class="text-lg font-bold text-slate-800">Calendário de Disponibilidade</h3>
+                                <div class="flex items-center gap-2">
+                                    <div class="flex items-center gap-1 bg-slate-100 p-1 rounded-lg">
+                                        <button @click="calendarYear--" class="px-2 py-1 rounded-md hover:bg-white transition"><i class="fa-solid fa-chevron-left text-xs"></i></button>
+                                        <span class="font-bold text-sm w-12 text-center">{{ calendarYear }}</span>
+                                        <button @click="calendarYear++" class="px-2 py-1 rounded-md hover:bg-white transition"><i class="fa-solid fa-chevron-right text-xs"></i></button>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                <div v-for="month in calendarMonths" :key="month.name" class="border border-slate-100 rounded-xl overflow-hidden shadow-sm">
+                                    <div class="bg-slate-50 px-4 py-2 font-bold text-center text-slate-700 text-sm border-b border-slate-100">{{ month.name }}</div>
+                                    <div class="grid grid-cols-7 text-center text-[10px] text-slate-400 py-1 bg-white">
+                                        <div v-for="day in ['D','S','T','Q','Q','S','S']" :key="day">{{ day }}</div>
+                                    </div>
+                                    <div class="grid grid-cols-7 text-center text-xs bg-white">
+                                        <div v-for="(day, idx) in month.days" :key="idx" 
+                                             class="aspect-square flex flex-col items-center justify-center p-1 border-t border-r border-slate-50 cursor-pointer transition-all"
+                                             :class="day.empty ? 'bg-slate-50/30' : day.stats.heatClass"
+                                             @click="openDayDetails(day)">
+                                            <template v-if="!day.empty">
+                                                <span class="font-semibold opacity-80 text-xs">{{ day.day }}</span>
+                                                <span v-if="day.stats.total > 0" class="text-[10px] font-bold mt-1" :class="day.stats.unavailableCount > 0 ? 'text-slate-500' : 'text-slate-400'">
+                                                    {{ day.stats.unavailableCount }}/{{ day.stats.total }}
+                                                </span>
+                                            </template>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Gerenciador de Eventos -->
+                        <div class="bg-white rounded-xl shadow-sm border border-slate-200">
+                            <div class="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                                <div>
+                                    <h3 class="font-bold text-slate-700">Gestão de Eventos</h3>
+                                    <p class="text-xs text-slate-500">Adicione recessos, feriados ou outros períodos de indisponibilidade.</p>
+                                </div>
+                                <button @click="openEventModal()" class="bg-brand hover:bg-brandDark text-white px-4 py-2 rounded-lg text-sm font-bold shadow-lg shadow-brand/20 transition flex items-center gap-2">
+                                    <i class="fa-solid fa-plus"></i> Novo Evento
+                                </button>
+                            </div>
+                            
+                            <!-- Lista de Eventos -->
+                            <div class="p-5">
+                                <div v-if="eventList.length === 0" class="text-center py-12 text-slate-400 border-2 border-dashed border-slate-200 rounded-xl">
+                                    <i class="fa-solid fa-calendar-plus text-4xl mb-3 opacity-50"></i>
+                                    <p class="font-medium">Nenhum evento cadastrado.</p>
+                                    <p class="text-sm">Clique em "Novo Evento" para começar.</p>
+                                </div>
+                                <div v-else class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div v-for="(evt, index) in eventList" :key="index" class="bg-slate-50/80 border border-slate-200 rounded-lg p-4 flex justify-between items-start shadow-sm hover:shadow-md transition-shadow relative overflow-hidden">
+                                        <div class="absolute left-0 top-0 bottom-0 w-1.5" :style="{ backgroundColor: evt.color }"></div>
+                                        <div class="pl-3 flex-grow">
+                                            <p class="font-bold text-slate-800">{{ evt.title }}</p>
+                                            <p class="text-xs text-slate-500 font-medium my-1">
+                                                {{ formatDateBR(evt.start) }} <i class="fa-solid fa-arrow-right-long mx-1"></i> {{ formatDateBR(evt.end) }}
+                                            </p>
+                                            <div class="mt-2 flex flex-wrap gap-2">
+                                                <span class="text-[10px] font-bold bg-white px-2 py-1 rounded border border-slate-200 shadow-sm text-slate-600 uppercase">{{ evt.category }}</span>
+                                                <span class="text-[10px] font-bold bg-white px-2 py-1 rounded border border-slate-200 shadow-sm text-slate-600">
+                                                    <i class="fa-solid mr-1" :class="getScopeIcon(evt.scope)"></i>
+                                                    {{ getScopeLabel(evt) }}
+                                                </span>
+                                            </div>
+                                        </div>
+                                        <div class="flex flex-col gap-1">
+                                            <button @click="openEventModal(evt, index)" class="w-7 h-7 flex items-center justify-center rounded-full text-slate-400 hover:bg-white hover:text-brand transition-colors"><i class="fa-solid fa-pen"></i></button>
+                                            <button @click="removeEvent(index)" class="w-7 h-7 flex items-center justify-center rounded-full text-slate-400 hover:bg-white hover:text-red-500 transition-colors"><i class="fa-solid fa-trash-can"></i></button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-5 flex justify-end">
+                             <button @click="saveEvents" :disabled="saving" class="bg-slate-800 hover:bg-black text-white px-6 py-2.5 rounded-lg text-sm font-bold shadow-lg shadow-slate-900/10 transition flex items-center gap-2">
+                                <span v-if="saving"><i class="fa-solid fa-circle-notch fa-spin"></i> Salvando...</span>
+                                <span v-else><i class="fa-solid fa-cloud-arrow-up"></i> Salvar Alterações na Nuvem</span>
+                            </button>
+                        </div>
+                    </div> <!-- End of Calendar Tab -->
+
+                    <!-- TAB: Team -->
+                    <div v-if="activeTab === 'team'" class="bg-white rounded-xl shadow-sm border border-slate-200 p-6 animate-fade-in-up">
+                        <div class="flex justify-between items-center mb-6">
+                            <div>
+                                <h3 class="text-lg font-bold text-slate-800">Equipe do Projeto</h3>
+                                <p class="text-sm text-slate-500">Gerencie os contatos e permissões da sua equipe.</p>
+                            </div>
+                            <button @click="openTeamModal()" class="bg-brand hover:bg-brandDark text-white px-4 py-2 rounded-lg text-sm font-bold transition shadow-lg shadow-brand/20">
+                                <i class="fa-solid fa-plus mr-2"></i> Adicionar Membro
+                            </button>
+                        </div>
+
+                        <div v-if="loadingTeam" class="text-center py-12">
+                            <i class="fa-solid fa-circle-notch fa-spin text-3xl text-brand mb-4"></i>
+                            <p class="text-slate-500">Carregando equipe...</p>
+                        </div>
+
+                        <div v-else-if="teamList.length === 0" class="text-center py-12 bg-slate-50 rounded-xl border border-dashed border-slate-300">
+                            <i class="fa-solid fa-users-slash text-4xl text-slate-300 mb-4"></i>
+                            <p class="text-slate-500 font-medium">Nenhum membro cadastrado.</p>
+                            <p class="text-xs text-slate-400 mt-1">Adicione os responsáveis pelo projeto.</p>
+                        </div>
+
+                        <div v-else class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div v-for="(member, index) in teamList" :key="member.id" class="border border-slate-200 rounded-xl p-4 hover:border-brand/30 transition group relative bg-white">
+                                <div class="flex items-start gap-4">
+                                    <div class="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 font-bold text-lg">
+                                        {{ member.name.charAt(0) }}
+                                    </div>
+                                    <div class="flex-grow">
+                                        <h4 class="font-bold text-slate-800">{{ member.name }}</h4>
+                                        <p class="text-xs text-brand font-bold uppercase tracking-wider mb-2">{{ member.role || 'Colaborador' }}</p>
+                                        <div class="space-y-1 text-sm text-slate-500">
+                                            <div v-if="member.email" class="flex items-center gap-2"><i class="fa-regular fa-envelope w-4"></i> {{ member.email }}</div>
+                                            <div v-if="member.phone" class="flex items-center gap-2"><i class="fa-solid fa-phone w-4"></i> {{ member.phone }}</div>
+                                        </div>
+                                    </div>
+                                    <div class="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition flex gap-2">
+                                        <button @click="openTeamModal(member)" class="text-slate-400 hover:text-brand"><i class="fa-solid fa-pen"></i></button>
+                                        <button @click="deleteTeamMember(member)" class="text-slate-400 hover:text-red-500"><i class="fa-solid fa-trash"></i></button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- TAB: Documents -->
+                    <div v-if="activeTab === 'documents'" class="bg-white rounded-xl shadow-sm border border-slate-200 p-6 animate-fade-in-up">
+                        <div class="flex justify-between items-center mb-6">
+                            <div>
+                                <h3 class="text-lg font-bold text-slate-800">Repositório de Documentos</h3>
+                                <p class="text-sm text-slate-500">Envie e gerencie os documentos do projeto.</p>
+                            </div>
+                            <button @click="openDocModal()" class="bg-brand hover:bg-brandDark text-white px-4 py-2 rounded-lg text-sm font-bold transition shadow-lg shadow-brand/20">
+                                <i class="fa-solid fa-cloud-arrow-up mr-2"></i> Enviar Documento
+                            </button>
+                        </div>
+
+                        <div v-if="loadingDocs" class="text-center py-12">
+                            <i class="fa-solid fa-circle-notch fa-spin text-3xl text-brand mb-4"></i>
+                            <p class="text-slate-500">Carregando documentos...</p>
+                        </div>
+
+                        <div v-else-if="docList.length === 0" class="text-center py-12 bg-slate-50 rounded-xl border border-dashed border-slate-300">
+                            <i class="fa-regular fa-folder-open text-4xl text-slate-300 mb-4"></i>
+                            <p class="text-slate-500 font-medium">Nenhum documento enviado.</p>
+                            <p class="text-xs text-slate-400 mt-1">Envie termos, planos de trabalho e outros arquivos.</p>
+                        </div>
+
+                        <div v-else class="space-y-3">
+                            <div v-for="doc in docList" :key="doc.id" class="flex items-center justify-between p-4 border border-slate-200 rounded-xl hover:bg-slate-50 transition group">
+                                <div class="flex items-center gap-4">
+                                    <div class="w-10 h-10 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center text-lg">
+                                        <i class="fa-solid fa-file-lines"></i>
+                                    </div>
+                                    <div>
+                                        <h4 class="font-bold text-slate-800 text-sm">{{ doc.name }}</h4>
+                                        <p class="text-xs text-slate-400">{{ new Date(doc.created_at).toLocaleDateString('pt-BR') }} • {{ (doc.size / 1024).toFixed(1) }} KB</p>
+                                    </div>
+                                </div>
+                                <div class="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition">
+                                    <a :href="doc.file_path" target="_blank" class="p-2 text-slate-400 hover:text-brand transition" title="Baixar"><i class="fa-solid fa-download"></i></a>
+                                    <button @click="deleteDocument(doc)" class="p-2 text-slate-400 hover:text-red-500 transition" title="Excluir"><i class="fa-solid fa-trash"></i></button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- VIEW: Community (Chat) -->
+                    <div v-if="activeTab === 'community'" class="animate-fade-in-up h-[600px] bg-white rounded-xl shadow-sm border border-slate-200 flex overflow-hidden">
+                        <!-- Sidebar de Canais -->
+                        <div class="w-64 bg-slate-50 border-r border-slate-200 flex flex-col">
+                            <div class="p-4 border-b border-slate-200">
+                                <h3 class="font-bold text-slate-700 text-sm">Canais</h3>
+                            </div>
+                            <div class="flex-grow overflow-y-auto p-2 space-y-1">
+                                <div v-for="channel in chatChannels" :key="channel.id" 
+                                     @click="selectChannel(channel)"
+                                     class="px-3 py-2 rounded-lg cursor-pointer text-sm flex items-center gap-2 transition-colors"
+                                     :class="currentChannel && currentChannel.id === channel.id ? 'bg-white shadow-sm text-brand font-bold' : 'text-slate-600 hover:bg-slate-100'">
+                                    <i class="fa-solid" :class="getChannelIcon(channel.type)"></i>
+                                    <span class="truncate">{{ channel.name }}</span>
+                                    <span v-if="channel.unread > 0" class="ml-auto bg-red-500 text-white text-[10px] font-bold px-1.5 rounded-full">{{ channel.unread }}</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Área de Chat -->
+                        <div class="flex-grow flex flex-col bg-white">
+                            <!-- Header do Chat -->
+                            <div class="h-14 border-b border-slate-100 flex items-center px-6 justify-between">
+                                <div v-if="currentChannel" class="flex items-center gap-2">
+                                    <i class="fa-solid text-slate-400" :class="getChannelIcon(currentChannel.type)"></i>
+                                    <div>
+                                        <h4 class="font-bold text-slate-800 text-sm">{{ currentChannel.name }}</h4>
+                                        <p class="text-[10px] text-slate-400">{{ getChannelDescription(currentChannel.type) }}</p>
+                                    </div>
+                                </div>
+                                <div v-else class="text-slate-400 text-sm italic">Selecione um canal</div>
+                            </div>
+
+                            <!-- Lista de Mensagens -->
+                            <div class="flex-grow overflow-y-auto p-6 space-y-4 bg-slate-50/30" id="chatMessagesContainer">
+                                <div v-if="!currentChannel" class="h-full flex flex-col items-center justify-center text-slate-300">
+                                    <i class="fa-regular fa-comments text-4xl mb-2"></i>
+                                    <p>Selecione um canal para começar</p>
+                                </div>
+                                <div v-else-if="chatMessages.length === 0" class="text-center py-10 text-slate-400 text-sm">
+                                    Nenhuma mensagem ainda. Seja o primeiro a falar!
+                                </div>
+                                <div v-for="msg in chatMessages" :key="msg.id" class="flex flex-col" :class="msg.isMe ? 'items-end' : 'items-start'">
+                                    <div class="flex items-end gap-2 max-w-[80%]">
+                                        <div v-if="!msg.isMe" class="w-6 h-6 rounded-full bg-slate-200 flex items-center justify-center text-[10px] font-bold text-slate-500 shrink-0">
+                                            {{ msg.senderInitials }}
+                                        </div>
+                                        <div>
+                                            <div v-if="!msg.isMe" class="text-[10px] text-slate-400 ml-1 mb-0.5">{{ msg.senderName }}</div>
+                                            <div class="px-4 py-2 rounded-2xl text-sm shadow-sm" 
+                                                 :class="msg.isMe ? 'bg-brand text-white rounded-br-none' : 'bg-white border border-slate-100 text-slate-700 rounded-bl-none'">
+                                                {{ msg.content }}
+                                            </div>
+                                            <div class="text-[9px] text-slate-300 mt-1 text-right mr-1">{{ formatTime(msg.created_at) }}</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Input de Mensagem -->
+                            <div class="p-4 border-t border-slate-100 bg-white">
+                                <form @submit.prevent="sendMessage" class="flex gap-2">
+                                    <input v-model="newMessage" type="text" :disabled="!currentChannel" placeholder="Digite sua mensagem..." class="flex-grow px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:border-brand outline-none text-sm transition disabled:opacity-50">
+                                    <button type="submit" :disabled="!currentChannel || !newMessage.trim()" class="bg-brand hover:bg-brandDark text-white w-10 h-10 rounded-xl flex items-center justify-center transition disabled:opacity-50 disabled:cursor-not-allowed shadow-sm">
+                                        <i class="fa-solid fa-paper-plane text-sm"></i>
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- MODAL: Detalhes do Dia -->
+            <transition name="fade">
+                <div v-if="showDayModal && selectedDay" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm" @click.self="showDayModal = false">
+                    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden animate-fade-in-up">
+                        <div class="px-6 py-4 bg-slate-50 border-b border-slate-200 flex justify-between items-center">
+                            <h3 class="font-bold text-lg text-slate-800">{{ selectedDay.dateFmt }}</h3>
+                            <button @click="showDayModal = false" class="text-slate-400 hover:text-red-500"><i class="fa-solid fa-times"></i></button>
+                        </div>
+                        <div class="p-6 max-h-96 overflow-y-auto">
+                            <div v-if="selectedDay.unavailableItems.length === 0" class="text-center text-slate-500 py-4">
+                                <i class="fa-regular fa-circle-check text-3xl text-emerald-500 mb-2"></i>
+                                <p class="text-sm">Todos os campi disponíveis.</p>
+                            </div>
+                            <div v-else class="space-y-3">
+                                <p class="text-xs font-bold text-slate-400 uppercase border-b border-slate-100 pb-2">Campi Indisponíveis</p>
+                                <div v-for="(item, idx) in selectedDay.unavailableItems" :key="idx" class="bg-slate-50 p-3 rounded-lg border border-slate-100">
+                                    <p class="font-bold text-slate-700 text-sm">{{ item.name }}</p>
+                                    <p class="text-xs text-red-500 font-medium mt-1">{{ item.reason }}</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </transition>
+
+
+
+            <!-- MODAL: Relatórios -->
+            <transition name="fade">
+                <div v-if="showReportModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm" @click.self="showReportModal = false">
+                    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-fade-in-up">
+                        <div class="px-6 py-4 bg-slate-50 border-b border-slate-200 flex justify-between items-center">
+                            <h3 class="font-bold text-lg text-slate-800">Resumo de Atividades</h3>
+                            <button @click="showReportModal = false" class="text-slate-400 hover:text-red-500"><i class="fa-solid fa-times"></i></button>
+                        </div>
+                        <div class="p-6 space-y-6">
+                            <div class="text-center">
+                                <p class="text-sm text-slate-500 uppercase font-bold tracking-wider mb-1">Total de Eventos</p>
+                                <p class="text-4xl font-display font-bold text-brand">{{ reportStats.total }}</p>
+                            </div>
+                            <div class="space-y-3">
+                                <p class="text-xs font-bold text-slate-400 uppercase border-b border-slate-100 pb-2">Por Categoria</p>
+                                <div v-for="(count, cat) in reportStats.byCategory" :key="cat" class="flex justify-between items-center text-sm">
+                                    <span class="flex items-center gap-2">
+                                        <span class="w-3 h-3 rounded-full" :style="{ backgroundColor: categoryColors[cat] || '#ccc' }"></span>
+                                        {{ cat }}
+                                    </span>
+                                    <span class="font-bold text-slate-700">{{ count }}</span>
+                                </div>
+                                <div v-if="reportStats.total === 0" class="text-center text-slate-400 text-sm py-2">
+                                    Nenhum dado disponível.
+                                </div>
+                            </div>
+                        </div>
+                        <div class="px-6 py-4 bg-slate-50 border-t border-slate-200 text-center">
+                            <button @click="showReportModal = false" class="text-sm font-bold text-brand hover:underline">Fechar</button>
+                        </div>
+                    </div>
+                </div>
+            </transition>
+
+            <!-- MODAL: Novo/Editar Evento -->
+            <transition name="fade">
+                <div v-if="showEventModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm" @click.self="closeEventModal">
+                    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden animate-fade-in-up max-h-[90vh] flex flex-col">
+                        <div class="px-6 py-4 bg-slate-50 border-b border-slate-200 flex justify-between items-center">
+                            <h3 class="font-bold text-lg text-slate-800">{{ editingEventIndex === null ? 'Criar Novo Evento' : 'Editar Evento' }}</h3>
+                            <button @click="closeEventModal" class="text-slate-400 hover:text-red-500"><i class="fa-solid fa-times"></i></button>
+                        </div>
+                        
+                        <div class="p-6 space-y-5 overflow-y-auto">
+                            <!-- Dados Básicos -->
+                            <div class="grid grid-cols-1 gap-4">
+                                <!-- Título removido conforme solicitado -->
+                                <div>
+                                    <label class="block text-xs font-bold text-slate-500 mb-1.5">Categoria</label>
+                                    <select v-model="eventForm.category" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white focus:border-brand outline-none transition">
+                                        <option v-for="(color, cat) in categoryColors" :key="cat" :value="cat">{{ cat }}</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <!-- Datas -->
+                            <div class="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-xs font-bold text-slate-500 mb-1.5">Data de Início</label>
+                                    <input v-model="eventForm.start" type="date" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:border-brand outline-none transition">
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-bold text-slate-500 mb-1.5">Data de Fim</label>
+                                    <input v-model="eventForm.end" type="date" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:border-brand outline-none transition">
+                                </div>
+                            </div>
+
+                            <!-- Escopo -->
+                            <div class="bg-slate-50 p-4 rounded-xl border border-slate-200">
+                                <label class="block text-xs font-bold text-slate-500 mb-3 uppercase tracking-wide">Quais campi serão afetados?</label>
+                                <div class="flex items-center gap-6 mb-4">
+                                    <label class="flex items-center gap-2 cursor-pointer text-sm font-medium">
+                                        <input type="radio" v-model="eventForm.scope" value="all" class="text-brand focus:ring-brand/50 border-slate-300">
+                                        Todos os campi
+                                    </label>
+                                    <label class="flex items-center gap-2 cursor-pointer text-sm font-medium">
+                                        <input type="radio" v-model="eventForm.scope" value="specific" class="text-brand focus:ring-brand/50 border-slate-300">
+                                        Selecionar campi
+                                    </label>
+                                </div>
+
+                                <!-- Seletor de Campi -->
+                                <div v-if="eventForm.scope === 'specific'" class="bg-white border border-slate-200 rounded-lg p-3 max-h-40 overflow-y-auto custom-scrollbar">
+                                    <div v-for="campus in currentUser.campi" :key="campus.id" class="flex items-center gap-2.5 mb-1.5 p-1 rounded hover:bg-slate-50">
+                                        <input type="checkbox" :value="campus.id" v-model="eventForm.targetIds" class="h-4 w-4 rounded border-slate-300 text-brand focus:ring-brand/50">
+                                        <span class="text-sm text-slate-700">{{ campus.name }}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="px-6 py-4 bg-slate-100 border-t border-slate-200 flex justify-end gap-3">
+                            <button @click="closeEventModal" class="px-5 py-2 rounded-lg text-slate-600 font-bold hover:bg-slate-200 transition">Cancelar</button>
+                            <button @click="submitEvent" class="px-6 py-2 bg-brand hover:bg-brandDark text-white rounded-lg font-bold shadow-lg transition">
+                                {{ editingEventIndex === null ? 'Adicionar Evento' : 'Atualizar Evento' }}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </transition>
+            <!-- MODAL: Upload Documento -->
+            <transition name="fade">
+                <div v-if="showDocModal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4" @click.self="showDocModal = false">
+                    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-scale-in">
+                        <div class="bg-slate-50 px-6 py-4 border-b border-slate-100 flex justify-between items-center">
+                            <h3 class="font-bold text-slate-800">Enviar Documento</h3>
+                            <button @click="showDocModal = false" class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-times"></i></button>
+                        </div>
+                        <div class="p-6 space-y-4">
+                            <div>
+                                <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Nome do Arquivo</label>
+                                <input v-model="docForm.name" type="text" placeholder="Ex: Termo de Adesão Assinado" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:border-brand outline-none">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Arquivo</label>
+                                <div class="border-2 border-dashed border-slate-300 rounded-lg p-6 text-center hover:bg-slate-50 transition cursor-pointer relative">
+                                    <input type="file" @change="handleFileSelect" class="absolute inset-0 opacity-0 cursor-pointer">
+                                    <div v-if="docForm.file">
+                                        <i class="fa-solid fa-file-check text-green-500 text-2xl mb-2"></i>
+                                        <p class="text-sm font-bold text-slate-700">{{ docForm.file.name }}</p>
+                                        <p class="text-xs text-slate-400">{{ (docForm.file.size / 1024).toFixed(1) }} KB</p>
+                                    </div>
+                                    <div v-else>
+                                        <i class="fa-solid fa-cloud-arrow-up text-slate-300 text-2xl mb-2"></i>
+                                        <p class="text-sm text-slate-500">Clique ou arraste para enviar</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="px-6 py-4 bg-slate-50 border-t border-slate-100 flex justify-end gap-2">
+                            <button @click="showDocModal = false" class="px-4 py-2 text-slate-500 hover:text-slate-700 font-medium text-sm">Cancelar</button>
+                            <button @click="uploadDocument" :disabled="uploading" class="px-4 py-2 bg-brand hover:bg-brandDark text-white rounded-lg font-bold text-sm shadow-lg shadow-brand/20 flex items-center gap-2">
+                                <i v-if="uploading" class="fa-solid fa-circle-notch fa-spin"></i>
+                                {{ uploading ? 'Enviando...' : 'Enviar' }}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </transition>
+
+            <!-- MODAL: Equipe -->
+            <transition name="fade">
+                <div v-if="showTeamModal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4" @click.self="showTeamModal = false">
+                    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-scale-in">
+                        <div class="bg-slate-50 px-6 py-4 border-b border-slate-100 flex justify-between items-center">
+                            <h3 class="font-bold text-slate-800">{{ teamForm.id ? 'Editar Membro' : 'Novo Membro' }}</h3>
+                            <button @click="showTeamModal = false" class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-times"></i></button>
+                        </div>
+                        <div class="p-6 space-y-4">
+                            <div>
+                                <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Nome Completo</label>
+                                <input v-model="teamForm.name" type="text" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:border-brand outline-none">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Função / Cargo</label>
+                                <select v-model="teamForm.role" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:border-brand outline-none mb-2">
+                                    <option value="Coordenador">Coordenador</option>
+                                    <option value="Financeiro">Financeiro</option>
+                                    <option value="Técnico">Técnico</option>
+                                    <option value="Administrativo">Administrativo</option>
+                                    <option value="Outro">Outro (Especificar)</option>
+                                </select>
+                                <input v-if="teamForm.role === 'Outro'" v-model="teamForm.customRole" type="text" placeholder="Digite o cargo..." class="w-full px-3 py-2 bg-white border border-brand/50 rounded-lg focus:border-brand outline-none animate-fade-in text-sm">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-bold text-slate-500 uppercase mb-1">E-mail</label>
+                                <input v-model="teamForm.email" type="email" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:border-brand outline-none">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Telefone / WhatsApp</label>
+                                <input v-model="teamForm.phone" type="text" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:border-brand outline-none">
+                            </div>
+                        </div>
+                        <div class="px-6 py-4 bg-slate-50 border-t border-slate-100 flex justify-end gap-2">
+                            <button @click="showTeamModal = false" class="px-4 py-2 text-slate-500 hover:text-slate-700 font-medium text-sm">Cancelar</button>
+                            <button @click="saveTeamMember" class="px-4 py-2 bg-brand hover:bg-brandDark text-white rounded-lg font-bold text-sm shadow-lg shadow-brand/20">Salvar</button>
+                        </div>
+                    </div>
+                </div>
+            </transition>
+            </div>
+
+            <!-- VIEW: Specialist Dashboard -->
+            <div v-else-if="currentView === 'specialist_dashboard'" class="animate-fade-in-up">
+                
+                <header class="mb-8 flex justify-between items-end">
+                    <div>
+                        <h1 class="text-2xl md:text-3xl font-display font-bold text-slate-900">Painel do Especialista</h1>
+                        <p class="text-slate-500">Gerencie suas atividades e relatórios.</p>
+                    </div>
+                </header>
+
+                <!-- KANBAN BOARD (Always Visible) -->
+                <div class="mb-10">
+                    <!-- Header & Controls -->
+                    <div class="bg-white rounded-t-xl shadow-sm border border-slate-200 p-4 flex justify-between items-center border-b-0">
+                        <div>
+                            <h3 class="font-bold text-slate-800 text-lg"><i class="fa-solid fa-list-check mr-2 text-brand"></i>Quadro de Tarefas</h3>
+                            <p class="text-xs text-slate-500">Gerencie as atividades do edital em tempo real.</p>
+                        </div>
+                        <div class="flex items-center gap-3">
+                            <select v-model="selectedEditalId" @change="fetchKanbanCards" class="px-3 py-2 border border-slate-200 rounded-lg text-sm outline-none focus:border-brand bg-slate-50">
+                                <option :value="null">Selecione um Grupo/Projeto...</option>
+                                <option v-for="proj in specialistProjects" :key="proj.project.group_id" :value="proj.project.group_id">
+                                    {{ proj.project.group_name }} ({{ proj.project.edital }})
+                                </option>
+                            </select>
+                            <button @click="openKanbanModal()" :disabled="!selectedEditalId" class="bg-brand hover:bg-brandDark disabled:opacity-50 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg text-sm font-bold shadow-lg shadow-brand/20 transition flex items-center gap-2">
+                                <i class="fa-solid fa-plus"></i> Nova Tarefa
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Kanban Board Content -->
+                    <div class="bg-slate-50 rounded-b-xl border border-slate-200 p-4 h-[500px]">
+                        <div v-if="!selectedEditalId" class="h-full flex flex-col items-center justify-center text-slate-400 border-2 border-dashed border-slate-200 rounded-xl bg-white/50">
+                            <i class="fa-solid fa-arrow-up text-4xl mb-4 animate-bounce"></i>
+                            <p class="font-medium">Selecione um Grupo acima para visualizar o quadro.</p>
+                        </div>
+
+                        <div v-else class="h-full grid grid-cols-3 gap-6 overflow-hidden">
+                            <!-- Coluna: A Fazer -->
+                            <div class="bg-slate-100 rounded-xl p-4 flex flex-col h-full border border-slate-200 shadow-inner">
+                                <div class="flex justify-between items-center mb-4 px-1">
+                                    <span class="text-sm font-bold text-slate-600 uppercase flex items-center gap-2">
+                                        <span class="w-2.5 h-2.5 rounded-full bg-slate-400"></span> A Fazer
+                                    </span>
+                                    <span class="bg-white text-slate-600 px-2 py-0.5 rounded-full text-xs font-bold shadow-sm">{{ getKanbanItems('todo').length }}</span>
+                                </div>
+                                <div class="flex-grow overflow-y-auto space-y-3 custom-scrollbar pr-1" 
+                                        @dragover.prevent 
+                                        @drop="onDrop($event, 'todo')">
+                                    <div v-for="item in getKanbanItems('todo')" 
+                                            :key="item.id" 
+                                            draggable="true" 
+                                            @dragstart="onDragStart($event, item)"
+                                            class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 cursor-move hover:border-brand hover:shadow-md transition group relative">
+                                        <div class="flex justify-between items-start mb-2">
+                                            <span class="text-[10px] font-bold px-2 py-1 rounded uppercase" 
+                                                    :class="getPriorityClass(item.priority)">{{ item.priority || 'Normal' }}</span>
+                                            <div class="flex gap-1 opacity-0 group-hover:opacity-100 transition">
+                                                <button @click="openKanbanModal(item)" class="text-slate-300 hover:text-brand"><i class="fa-solid fa-pen"></i></button>
+                                                <button @click="deleteKanbanItem(item.id)" class="text-slate-300 hover:text-red-500"><i class="fa-solid fa-times"></i></button>
+                                            </div>
+                                        </div>
+                                        <p class="text-sm font-bold text-slate-700 mb-1 leading-snug">{{ item.title }}</p>
+                                        <p v-if="item.description" class="text-xs text-slate-500 mb-2 line-clamp-2">{{ item.description }}</p>
+                                        <div class="flex items-center justify-between mt-3 pt-3 border-t border-slate-50">
+                                            <div class="flex items-center gap-2 text-[10px] text-slate-400">
+                                                <div class="w-5 h-5 rounded-full bg-slate-100 flex items-center justify-center font-bold text-slate-500">
+                                                    {{ item.assignee ? item.assignee.charAt(0) : '?' }}
+                                                </div>
+                                                {{ item.assignee || 'Não atribuído' }}
+                                            </div>
+                                            <span class="text-[9px] text-slate-300">{{ new Date(item.created_at).toLocaleDateString('pt-BR') }}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <button @click="openKanbanModal(null, 'todo')" class="mt-2 w-full py-2 border-2 border-dashed border-slate-300 rounded-lg text-slate-400 hover:border-brand hover:text-brand hover:bg-white transition text-xs font-bold">
+                                    <i class="fa-solid fa-plus mr-1"></i> Adicionar Tarefa
+                                </button>
+                            </div>
+
+                            <!-- Coluna: Em Andamento -->
+                            <div class="bg-blue-50 rounded-xl p-4 flex flex-col h-full border border-blue-100 shadow-inner">
+                                <div class="flex justify-between items-center mb-4 px-1">
+                                    <span class="text-sm font-bold text-blue-700 uppercase flex items-center gap-2">
+                                        <span class="w-2.5 h-2.5 rounded-full bg-blue-500"></span> Em Andamento
+                                    </span>
+                                    <span class="bg-white text-blue-700 px-2 py-0.5 rounded-full text-xs font-bold shadow-sm">{{ getKanbanItems('doing').length }}</span>
+                                </div>
+                                <div class="flex-grow overflow-y-auto space-y-3 custom-scrollbar pr-1" 
+                                        @dragover.prevent 
+                                        @drop="onDrop($event, 'doing')">
+                                    <div v-for="item in getKanbanItems('doing')" 
+                                            :key="item.id" 
+                                            draggable="true" 
+                                            @dragstart="onDragStart($event, item)"
+                                            class="bg-white p-4 rounded-xl shadow-sm border border-blue-100 cursor-move hover:border-blue-400 hover:shadow-md transition group relative">
+                                        <div class="flex justify-between items-start mb-2">
+                                            <span class="text-[10px] font-bold px-2 py-1 rounded uppercase" 
+                                                    :class="getPriorityClass(item.priority)">{{ item.priority || 'Normal' }}</span>
+                                            <div class="flex gap-1 opacity-0 group-hover:opacity-100 transition">
+                                                <button @click="openKanbanModal(item)" class="text-slate-300 hover:text-brand"><i class="fa-solid fa-pen"></i></button>
+                                                <button @click="deleteKanbanItem(item.id)" class="text-slate-300 hover:text-red-500"><i class="fa-solid fa-times"></i></button>
+                                            </div>
+                                        </div>
+                                        <p class="text-sm font-bold text-slate-700 mb-1 leading-snug">{{ item.title }}</p>
+                                        <p v-if="item.description" class="text-xs text-slate-500 mb-2 line-clamp-2">{{ item.description }}</p>
+                                        <div class="flex items-center justify-between mt-3 pt-3 border-t border-slate-50">
+                                            <div class="flex items-center gap-2 text-[10px] text-slate-400">
+                                                <div class="w-5 h-5 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold">
+                                                    {{ item.assignee ? item.assignee.charAt(0) : '?' }}
+                                                </div>
+                                                {{ item.assignee || 'Não atribuído' }}
+                                            </div>
+                                            <span class="text-[9px] text-slate-300">{{ new Date(item.created_at).toLocaleDateString('pt-BR') }}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <button @click="openKanbanModal(null, 'doing')" class="mt-2 w-full py-2 border-2 border-dashed border-blue-200 rounded-lg text-blue-400 hover:border-blue-500 hover:text-blue-600 hover:bg-white transition text-xs font-bold">
+                                    <i class="fa-solid fa-plus mr-1"></i> Adicionar Tarefa
+                                </button>
+                            </div>
+
+                            <!-- Coluna: Concluído -->
+                            <div class="bg-green-50 rounded-xl p-4 flex flex-col h-full border border-green-100 shadow-inner">
+                                <div class="flex justify-between items-center mb-4 px-1">
+                                    <span class="text-sm font-bold text-green-700 uppercase flex items-center gap-2">
+                                        <span class="w-2.5 h-2.5 rounded-full bg-green-500"></span> Concluído
+                                    </span>
+                                    <span class="bg-white text-green-700 px-2 py-0.5 rounded-full text-xs font-bold shadow-sm">{{ getKanbanItems('done').length }}</span>
+                                </div>
+                                <div class="flex-grow overflow-y-auto space-y-3 custom-scrollbar pr-1" 
+                                        @dragover.prevent 
+                                        @drop="onDrop($event, 'done')">
+                                    <div v-for="item in getKanbanItems('done')" 
+                                            :key="item.id" 
+                                            draggable="true" 
+                                            @dragstart="onDragStart($event, item)"
+                                            class="bg-white p-4 rounded-xl shadow-sm border border-green-100 cursor-move hover:border-green-400 hover:shadow-md transition group relative opacity-75 hover:opacity-100">
+                                        <div class="flex justify-between items-start mb-2">
+                                            <span class="text-[10px] font-bold bg-green-100 text-green-700 px-2 py-1 rounded uppercase"><i class="fa-solid fa-check mr-1"></i> Feito</span>
+                                            <div class="flex gap-1 opacity-0 group-hover:opacity-100 transition">
+                                                <button @click="openKanbanModal(item)" class="text-slate-300 hover:text-brand"><i class="fa-solid fa-pen"></i></button>
+                                                <button @click="deleteKanbanItem(item.id)" class="text-slate-300 hover:text-red-500"><i class="fa-solid fa-times"></i></button>
+                                            </div>
+                                        </div>
+                                        <p class="text-sm font-medium text-slate-700 line-through text-slate-400 mb-1 leading-snug">{{ item.title }}</p>
+                                        <div class="flex items-center justify-between mt-3 pt-3 border-t border-slate-50">
+                                            <div class="flex items-center gap-2 text-[10px] text-slate-400">
+                                                <div class="w-5 h-5 rounded-full bg-green-100 text-green-600 flex items-center justify-center font-bold">
+                                                    {{ item.assignee ? item.assignee.charAt(0) : '?' }}
+                                                </div>
+                                                {{ item.assignee || 'Não atribuído' }}
+                                            </div>
+                                            <span class="text-[9px] text-slate-300">{{ new Date(item.created_at).toLocaleDateString('pt-BR') }}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <button @click="openKanbanModal(null, 'done')" class="mt-2 w-full py-2 border-2 border-dashed border-green-200 rounded-lg text-green-400 hover:border-green-500 hover:text-green-600 hover:bg-white transition text-xs font-bold">
+                                    <i class="fa-solid fa-plus mr-1"></i> Adicionar Tarefa
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- MODAL: Kanban Card (Novo/Editar) -->
+                <transition name="fade">
+                    <div v-if="showKanbanModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm" @click.self="showKanbanModal = false">
+                        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-fade-in-up">
+                            <div class="px-6 py-4 bg-slate-50 border-b border-slate-200 flex justify-between items-center">
+                                <h3 class="font-bold text-lg text-slate-800">{{ kanbanForm.id ? 'Editar Tarefa' : 'Nova Tarefa' }}</h3>
+                                <button @click="showKanbanModal = false" class="text-slate-400 hover:text-red-500"><i class="fa-solid fa-times"></i></button>
+                            </div>
+                            <div class="p-6 space-y-4">
+                                <div>
+                                    <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Título</label>
+                                    <input v-model="kanbanForm.title" type="text" class="w-full px-3 py-2 border border-slate-200 rounded-lg focus:border-brand outline-none text-sm font-bold text-slate-700">
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Descrição</label>
+                                    <textarea v-model="kanbanForm.description" rows="3" class="w-full px-3 py-2 border border-slate-200 rounded-lg focus:border-brand outline-none text-sm"></textarea>
+                                </div>
+                                <div class="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Prioridade</label>
+                                        <select v-model="kanbanForm.priority" class="w-full px-3 py-2 border border-slate-200 rounded-lg focus:border-brand outline-none text-sm bg-white">
+                                            <option value="low">Baixa</option>
+                                            <option value="medium">Média</option>
+                                            <option value="high">Alta</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Responsável</label>
+                                        <input v-model="kanbanForm.assignee" type="text" class="w-full px-3 py-2 border border-slate-200 rounded-lg focus:border-brand outline-none text-sm">
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="px-6 py-4 bg-slate-50 border-t border-slate-200 flex justify-end gap-2">
+                                <button @click="showKanbanModal = false" class="text-slate-500 hover:text-slate-700 font-bold text-sm px-4 py-2">Cancelar</button>
+                                <button @click="saveKanbanCard" class="bg-brand hover:bg-brandDark text-white px-4 py-2 rounded-lg font-bold text-sm shadow-lg shadow-brand/20 transition">
+                                    Salvar
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </transition>
+
+                <div class="flex justify-between items-center mb-6">
+                    <div>
+                        <h2 class="text-xl font-bold text-slate-800">Meus Relatórios</h2>
+                        <p class="text-sm text-slate-500">Histórico de submissões.</p>
+                    </div>
+                    <button @click="openReportModal()" class="bg-white hover:bg-slate-50 text-brand border border-brand px-4 py-2 rounded-lg font-bold shadow-sm transition flex items-center gap-2 text-sm">
+                        <i class="fa-solid fa-plus"></i> Novo Relatório
+                    </button>
+                </div>
+
+                <!-- Lista de Relatórios -->
+                <div v-if="specialistReports.length === 0" class="text-center py-16 bg-white rounded-2xl shadow-sm border border-slate-200">
+                    <i class="fa-solid fa-file-contract text-5xl text-slate-200 mb-4"></i>
+                    <p class="text-slate-500 font-medium">Nenhum relatório encontrado.</p>
+                    <p class="text-sm text-slate-400 mt-1">Clique em "Novo Relatório" para começar.</p>
+                </div>
+
+                <div v-else class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    <div v-for="report in specialistReports" :key="report.id" class="bg-white rounded-xl shadow-sm border border-slate-200 p-6 hover:border-brand/30 transition group relative">
+                        <div class="flex justify-between items-start mb-4">
+                            <span :class="{'bg-yellow-100 text-yellow-700': report.status === 'draft', 'bg-green-100 text-green-700': report.status === 'submitted'}" class="text-[10px] font-bold px-2 py-1 rounded uppercase">
+                                {{ report.status === 'draft' ? 'Rascunho' : 'Enviado' }}
+                            </span>
+                            <span class="text-xs text-slate-400">{{ new Date(report.updated_at).toLocaleDateString('pt-BR') }}</span>
+                        </div>
+                        <h3 class="font-bold text-slate-800 mb-2 line-clamp-2">{{ report.title || 'Sem Título' }}</h3>
+                        <p class="text-sm text-slate-500 mb-4 line-clamp-3">{{ report.content.diagnostic_summary || 'Sem resumo...' }}</p>
+                        
+                        <div class="flex justify-end gap-2 mt-4 pt-4 border-t border-slate-100">
+                            <button @click="openReportModal(report, 'diary')" class="text-brand hover:text-brandDark text-sm font-bold transition flex items-center gap-1">
+                                <i class="fa-solid fa-clipboard-list"></i> Diário
+                            </button>
+                            <button @click="openReportModal(report, 'planning')" class="text-slate-400 hover:text-brand text-sm font-bold transition ml-2">Editar</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- MODAL: Relatório -->
+                <transition name="fade">
+                    <div v-if="showReportModal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4" @click.self="closeReportModal">
+                        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-5xl h-[90vh] flex flex-col overflow-hidden animate-scale-in">
+                            
+                            <!-- Header -->
+                            <div class="bg-slate-50 px-8 py-4 border-b border-slate-100 flex justify-between items-center">
+                                <div>
+                                    <h3 class="font-bold text-slate-800 text-lg">{{ currentReport.id ? 'Editar Relatório' : 'Novo Relatório' }}</h3>
+                                    <p class="text-xs text-slate-500">Preencha as informações abaixo.</p>
+                                </div>
+                                <div class="flex items-center gap-3">
+                                    <button @click="closeReportModal" class="text-slate-400 hover:text-slate-600 mr-2"><i class="fa-solid fa-times text-xl"></i></button>
+                                    <button @click="saveReport('draft')" class="text-slate-500 hover:text-brand font-bold text-sm px-4 py-2 rounded-lg hover:bg-slate-100 transition">
+                                        Salvar Rascunho
+                                    </button>
+                                    <button @click="saveReport('submitted')" class="bg-brand hover:bg-brandDark text-white px-4 py-2 rounded-lg font-bold text-sm shadow-lg shadow-brand/20 transition">
+                                        <i class="fa-solid fa-paper-plane mr-2"></i> Enviar
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- Tabs Navigation -->
+                            <div class="bg-white border-b border-slate-200 px-8 flex gap-6">
+                                <button @click="activeReportTab = 'planning'" :class="activeReportTab === 'planning' ? 'border-brand text-brand' : 'border-transparent text-slate-500 hover:text-slate-700'" class="py-3 text-sm font-bold border-b-2 transition">
+                                    1. Planejamento
+                                </button>
+                                <button @click="activeReportTab = 'diary'" :class="activeReportTab === 'diary' ? 'border-brand text-brand' : 'border-transparent text-slate-500 hover:text-slate-700'" class="py-3 text-sm font-bold border-b-2 transition flex items-center gap-2">
+                                    2. Diário de Bordo <span class="bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded text-[10px]">{{ reportForm.attendance_logs.length }}</span>
+                                </button>
+                                <button @click="activeReportTab = 'closing'" :class="activeReportTab === 'closing' ? 'border-brand text-brand' : 'border-transparent text-slate-500 hover:text-slate-700'" class="py-3 text-sm font-bold border-b-2 transition">
+                                    3. Relatório Final
+                                </button>
+                            </div>
+
+                            <!-- Form Content (Scrollable) -->
+                            <div class="flex-grow overflow-y-auto p-8 bg-slate-50/50">
+                                <div class="max-w-4xl mx-auto space-y-8">
+                                    
+                                    <!-- TAB 1: Planejamento -->
+                                    <div v-show="activeReportTab === 'planning'" class="space-y-8 animate-fade-in">
+                                        <!-- 1. Cabeçalho -->
+                                        <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+                                            <h4 class="font-bold text-slate-800 mb-4 border-b pb-2">Informações Gerais</h4>
+                                            
+                                            <!-- Seleção de Projeto (Novo) -->
+                                            <div class="mb-4 bg-blue-50 p-4 rounded-lg border border-blue-100">
+                                                <label class="block text-xs font-bold text-blue-600 uppercase mb-1">Vincular ao Projeto (Obrigatório)</label>
+                                                <select v-model="reportForm.ict_portal_id" class="w-full px-3 py-2 bg-white border border-blue-200 rounded-lg focus:border-brand outline-none font-bold text-slate-700" :disabled="currentReport.id">
+                                                    <option :value="null">Selecione um projeto...</option>
+                                                    <option v-for="proj in specialistProjects" :key="proj.project.id" :value="proj.project.id">
+                                                        {{ proj.project.ict_name }} - {{ proj.project.group_name }} ({{ proj.project.edital }})
+                                                    </option>
+                                                </select>
+                                                <p v-if="specialistProjects.length === 0" class="text-xs text-red-500 mt-1">Você não possui projetos ativos vinculados.</p>
+                                            </div>
+
+                                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                <div>
+                                                    <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Título do Relatório</label>
+                                                    <input v-model="reportForm.title" type="text" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:border-brand outline-none">
+                                                </div>
+                                                <div>
+                                                    <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Período de Execução</label>
+                                                    <input v-model="reportForm.period" type="text" placeholder="Ex: Nov/2025 a Fev/2026" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:border-brand outline-none">
+                                                </div>
+                                                <div>
+                                                    <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Tipo de Demanda</label>
+                                                    <select v-model="reportForm.demand_type" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:border-brand outline-none">
+                                                        <option value="Prioritária">Prioritária</option>
+                                                        <option value="Secundária">Secundária</option>
+                                                    </select>
+                                                </div>
+                                                <div>
+                                                    <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Área Temática</label>
+                                                    <input v-model="reportForm.theme_area" type="text" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:border-brand outline-none">
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <!-- 2. Diagnóstico -->
+                                        <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+                                            <h4 class="font-bold text-slate-800 mb-4 border-b pb-2">1. Resumo do Diagnóstico</h4>
+                                            
+                                            <div class="space-y-4">
+                                                <div>
+                                                    <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Breve descrição da assistência técnica</label>
+                                                    <textarea v-model="reportForm.diagnostic_summary" rows="3" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:border-brand outline-none text-sm"></textarea>
+                                                </div>
+                                                <div>
+                                                    <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Problema institucional abordado</label>
+                                                    <textarea v-model="reportForm.institutional_problem" rows="3" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:border-brand outline-none text-sm"></textarea>
+                                                </div>
+                                                <div>
+                                                    <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Objetivo geral da ação</label>
+                                                    <textarea v-model="reportForm.general_objective" rows="2" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:border-brand outline-none text-sm"></textarea>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <!-- 3. Plano de Atendimento (Tabela Dinâmica) -->
+                                        <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+                                            <div class="flex justify-between items-center mb-4 border-b pb-2">
+                                                <h4 class="font-bold text-slate-800">2. Plano de Atendimento</h4>
+                                                <button @click="addPlanRow" class="text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 px-2 py-1 rounded font-bold transition"><i class="fa-solid fa-plus"></i> Adicionar Ação</button>
+                                            </div>
+                                            
+                                            <div class="overflow-x-auto">
+                                                <table class="w-full text-sm text-left">
+                                                    <thead class="text-xs text-slate-500 uppercase bg-slate-50">
+                                                        <tr>
+                                                            <th class="px-3 py-2 rounded-l-lg">Ação Planejada</th>
+                                                            <th class="px-3 py-2">Descrição Resumida</th>
+                                                            <th class="px-3 py-2">Mês</th>
+                                                            <th class="px-3 py-2 rounded-r-lg">Obs/Dependências</th>
+                                                            <th class="px-1 py-2"></th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody class="divide-y divide-slate-100">
+                                                        <tr v-for="(row, idx) in reportForm.action_plan" :key="idx">
+                                                            <td class="p-2"><input v-model="row.action" type="text" class="w-full bg-transparent border-b border-slate-200 focus:border-brand outline-none"></td>
+                                                            <td class="p-2"><input v-model="row.description" type="text" class="w-full bg-transparent border-b border-slate-200 focus:border-brand outline-none"></td>
+                                                            <td class="p-2"><input v-model="row.month" type="text" class="w-full bg-transparent border-b border-slate-200 focus:border-brand outline-none"></td>
+                                                            <td class="p-2"><input v-model="row.obs" type="text" class="w-full bg-transparent border-b border-slate-200 focus:border-brand outline-none"></td>
+                                                            <td class="p-2 text-center"><button @click="removePlanRow(idx)" class="text-slate-300 hover:text-red-500"><i class="fa-solid fa-times"></i></button></td>
+                                                        </tr>
+                                                    </tbody>
+                                                </table>
+                                                <div v-if="reportForm.action_plan.length === 0" class="text-center py-4 text-slate-400 text-xs italic">Nenhuma ação planejada.</div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- TAB 3: Relatório Final (Closing) -->
+                                    <div v-show="activeReportTab === 'closing'" class="space-y-8 animate-fade-in">
+                                        <!-- 4. Produtos Entregues -->
+                                        <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+                                            <h4 class="font-bold text-slate-800 mb-4 border-b pb-2">3. Produtos Entregues</h4>
+                                            
+                                            <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
+                                                <label class="flex items-center gap-2 text-sm text-slate-600 cursor-pointer">
+                                                    <input type="checkbox" v-model="reportForm.products_types" value="Capacitação" class="rounded text-brand focus:ring-brand"> Capacitação / Treinamento
+                                                </label>
+                                                <label class="flex items-center gap-2 text-sm text-slate-600 cursor-pointer">
+                                                    <input type="checkbox" v-model="reportForm.products_types" value="Consultoria" class="rounded text-brand focus:ring-brand"> Consultoria técnica / Diagnóstico
+                                                </label>
+                                                <label class="flex items-center gap-2 text-sm text-slate-600 cursor-pointer">
+                                                    <input type="checkbox" v-model="reportForm.products_types" value="Normativas" class="rounded text-brand focus:ring-brand"> Elaboração de normativas
+                                                </label>
+                                                <label class="flex items-center gap-2 text-sm text-slate-600 cursor-pointer">
+                                                    <input type="checkbox" v-model="reportForm.products_types" value="Fluxos" class="rounded text-brand focus:ring-brand"> Desenvolvimento de fluxos
+                                                </label>
+                                                <label class="flex items-center gap-2 text-sm text-slate-600 cursor-pointer">
+                                                    <input type="checkbox" v-model="reportForm.products_types" value="Materiais" class="rounded text-brand focus:ring-brand"> Produção de materiais
+                                                </label>
+                                            </div>
+
+                                            <div>
+                                                <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Descrição detalhada das entregas</label>
+                                                <textarea v-model="reportForm.products_description" rows="3" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:border-brand outline-none text-sm"></textarea>
+                                            </div>
+                                        </div>
+
+                                        <!-- 5. Análise e Conclusão -->
+                                        <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+                                            <h4 class="font-bold text-slate-800 mb-4 border-b pb-2">4. Análise e Conclusão</h4>
+                                            
+                                            <div class="space-y-4">
+                                                <div>
+                                                    <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Análise de Impacto Institucional</label>
+                                                    <textarea v-model="reportForm.impact_analysis" rows="3" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:border-brand outline-none text-sm" placeholder="Impactos na gestão, benefícios diretos, replicabilidade..."></textarea>
+                                                </div>
+                                                <div>
+                                                    <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Desafios e Recomendações</label>
+                                                    <textarea v-model="reportForm.challenges" rows="3" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:border-brand outline-none text-sm"></textarea>
+                                                </div>
+                                                <div>
+                                                    <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Conclusão Final</label>
+                                                    <textarea v-model="reportForm.conclusion" rows="3" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:border-brand outline-none text-sm"></textarea>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- TAB 2: Diário de Bordo (Logs de Atendimento) -->
+                                    <div v-show="activeReportTab === 'diary'" class="animate-fade-in">
+                                        <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+                                            <div class="flex justify-between items-center mb-8 border-b pb-4">
+                                                <div>
+                                                    <h4 class="font-bold text-slate-800 text-lg">Diário de Bordo</h4>
+                                                    <p class="text-sm text-slate-500">Registre reuniões, visitas e atividades com evidências.</p>
+                                                </div>
+                                                <button @click="addLogRow" class="bg-brand hover:bg-brandDark text-white px-4 py-2 rounded-xl font-bold text-sm shadow-lg shadow-brand/20 transition flex items-center gap-2">
+                                                    <i class="fa-solid fa-plus"></i> Novo Registro
+                                                </button>
+                                            </div>
+                                            
+                                            <div class="space-y-6 relative">
+                                                <!-- Linha do Tempo Vertical -->
+                                                <div class="absolute left-4 top-4 bottom-4 w-0.5 bg-slate-200 hidden md:block"></div>
+
+                                                <div v-if="reportForm.attendance_logs.length === 0" class="text-center py-12 bg-slate-50 rounded-xl border border-dashed border-slate-300 ml-0 md:ml-8">
+                                                    <i class="fa-solid fa-clipboard-list text-4xl text-slate-300 mb-3"></i>
+                                                    <p class="text-slate-500 font-medium">Nenhum registro encontrado.</p>
+                                                    <p class="text-sm text-slate-400">Clique em "Novo Registro" para começar seu diário.</p>
+                                                </div>
+
+                                                <div v-for="(log, idx) in reportForm.attendance_logs" :key="idx" class="relative pl-0 md:pl-12 group">
+                                                    <!-- Bolinha da Timeline -->
+                                                    <div class="absolute left-4 top-4 w-3 h-3 bg-white border-2 border-brand rounded-full transform -translate-x-1.5 hidden md:block z-10 group-hover:scale-125 transition"></div>
+
+                                                    <div class="bg-white rounded-xl border border-slate-200 p-5 hover:shadow-md hover:border-brand/30 transition relative">
+                                                        <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-3 gap-2">
+                                                            <div class="flex items-center gap-3">
+                                                                <span class="bg-slate-100 text-slate-700 px-3 py-1 rounded-lg text-xs font-bold border border-slate-200">
+                                                                    <i class="fa-regular fa-calendar mr-1"></i> {{ new Date(log.date).toLocaleDateString('pt-BR') }}
+                                                                </span>
+                                                                <span class="text-xs font-bold text-brand uppercase tracking-wide bg-brand/5 px-2 py-1 rounded">{{ log.type }}</span>
+                                                            </div>
+                                                            <div class="flex gap-2 self-end md:self-auto">
+                                                                <button @click="editLogRow(idx)" class="text-slate-400 hover:text-brand transition p-1" title="Editar"><i class="fa-solid fa-pen-to-square"></i></button>
+                                                                <button @click="removeLogRow(idx)" class="text-slate-400 hover:text-red-500 transition p-1" title="Excluir"><i class="fa-solid fa-trash"></i></button>
+                                                            </div>
+                                                        </div>
+                                                        
+                                                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-4">
+                                                            <div>
+                                                                <p class="text-[10px] font-bold text-slate-400 uppercase mb-1">Participantes</p>
+                                                                <p class="text-sm text-slate-700 font-medium">{{ log.participants }}</p>
+                                                            </div>
+                                                            <div>
+                                                                <p class="text-[10px] font-bold text-slate-400 uppercase mb-1">Temas Abordados</p>
+                                                                <p class="text-sm text-slate-600">{{ log.themes }}</p>
+                                                            </div>
+                                                        </div>
+
+                                                        <div v-if="log.next_steps" class="mb-4 bg-slate-50 p-3 rounded-lg border border-slate-100">
+                                                            <p class="text-[10px] font-bold text-slate-400 uppercase mb-1"><i class="fa-solid fa-arrow-right text-brand mr-1"></i> Encaminhamentos</p>
+                                                            <p class="text-sm text-slate-700">{{ log.next_steps }}</p>
+                                                        </div>
+
+                                                        <!-- Evidências -->
+                                                        <div v-if="log.evidences && log.evidences.length > 0" class="border-t border-slate-100 pt-3 mt-2">
+                                                            <p class="text-[10px] font-bold text-slate-400 uppercase mb-2">Evidências Anexadas</p>
+                                                            <div class="flex flex-wrap gap-2">
+                                                                <a v-for="(file, fIdx) in log.evidences" :key="fIdx" :href="file.url" target="_blank" class="flex items-center gap-2 bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-lg text-xs text-slate-600 hover:text-brand hover:border-brand hover:bg-white transition shadow-sm">
+                                                                    <i class="fa-solid fa-paperclip text-slate-400"></i> {{ file.name }}
+                                                                </a>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </transition>
+                <!-- MODAL: Log de Atendimento (Diário) -->
+                <transition name="fade">
+                    <div v-if="showLogModal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[60] flex items-center justify-center p-4" @click.self="showLogModal = false">
+                        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden animate-scale-in">
+                            <div class="bg-slate-50 px-6 py-4 border-b border-slate-100 flex justify-between items-center">
+                                <h3 class="font-bold text-slate-800">{{ currentLogIndex !== null ? 'Editar Registro' : 'Novo Registro' }}</h3>
+                                <button @click="showLogModal = false" class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-times"></i></button>
+                            </div>
+                            <div class="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
+                                <div class="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Data</label>
+                                        <input v-model="logForm.date" type="date" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:border-brand outline-none">
+                                    </div>
+                                    <div>
+                                        <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Tipo</label>
+                                        <select v-model="logForm.type" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:border-brand outline-none">
+                                            <option value="Reunião Online">Reunião Online</option>
+                                            <option value="Visita Presencial">Visita Presencial</option>
+                                            <option value="Troca de E-mails">Troca de E-mails</option>
+                                            <option value="Análise Documental">Análise Documental</option>
+                                            <option value="Outro">Outro</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Participantes</label>
+                                    <input v-model="logForm.participants" type="text" placeholder="Nomes dos envolvidos..." class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:border-brand outline-none">
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Temas Abordados</label>
+                                    <textarea v-model="logForm.themes" rows="2" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:border-brand outline-none text-sm"></textarea>
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Encaminhamentos / Próximos Passos</label>
+                                    <textarea v-model="logForm.next_steps" rows="2" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:border-brand outline-none text-sm"></textarea>
+                                </div>
+
+                                <!-- Upload de Evidências -->
+                                <div class="border-t border-slate-100 pt-4">
+                                    <label class="block text-xs font-bold text-slate-500 uppercase mb-2">Evidências (Prints, Atas, Fotos)</label>
+                                    
+                                    <div class="flex flex-wrap gap-2 mb-3">
+                                        <div v-for="(file, idx) in logForm.evidences" :key="idx" class="bg-slate-100 border border-slate-200 rounded px-2 py-1 flex items-center gap-2 text-xs">
+                                            <span class="truncate max-w-[150px]">{{ file.name }}</span>
+                                            <button @click="removeLogEvidence(idx)" class="text-slate-400 hover:text-red-500"><i class="fa-solid fa-times"></i></button>
+                                        </div>
+                                    </div>
+
+                                    <div class="relative">
+                                        <input type="file" @change="uploadLogEvidence" class="hidden" id="logEvidenceInput">
+                                        <label for="logEvidenceInput" class="cursor-pointer inline-flex items-center gap-2 text-xs font-bold text-brand hover:text-brandDark bg-brand/5 hover:bg-brand/10 px-3 py-2 rounded-lg transition border border-brand/20">
+                                            <i v-if="uploadingLogEvidence" class="fa-solid fa-circle-notch fa-spin"></i>
+                                            <i v-else class="fa-solid fa-cloud-arrow-up"></i>
+                                            Adicionar Arquivo
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="px-6 py-4 bg-slate-50 border-t border-slate-100 flex justify-end gap-2">
+                                <button @click="showLogModal = false" class="px-4 py-2 text-slate-500 hover:text-slate-700 font-medium text-sm">Cancelar</button>
+                                <button @click="saveLogEntry" class="px-4 py-2 bg-brand hover:bg-brandDark text-white rounded-lg font-bold text-sm shadow-lg shadow-brand/20">Salvar Registro</button>
+                            </div>
+                        </div>
+                    </div>
+                </transition>
+
+            </div>
+
+        </main>
+
+        <!-- Footer Restaurado -->
+        <footer class="mt-auto py-8 border-t border-slate-200/60 bg-white/40 backdrop-blur-sm relative z-10">
+            <div class="container mx-auto px-4 flex flex-col items-center justify-center gap-5">
+                <img 
+                    src="https://www.gov.br/transferegov/pt-br/noticias/noticias/arquivos-e-imagens/mec.png/@@images/cfa8ccbe-9bb0-4e89-8cc4-d76db9608ffd.png" 
+                    alt="Logo Parceiros" 
+                    class="h-16 md:h-20 w-auto object-contain opacity-80 hover:opacity-100 transition duration-300 mix-blend-multiply"
+                >
+                <div class="text-center">
+                    <p class="text-slate-500 text-xs font-medium tracking-wide">
+                        © 2025 Assistec Inova- Todos os direitos reservados.
+                    </p>
+                </div>
+            </div>
+        </footer>
+    </div>
+
+    <!-- FIX 3: Load logic scripts at the end so the ID portalApp exists -->
+    <script src="js/portal.js"></script>
+</body>
+</html>
