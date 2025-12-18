@@ -1,0 +1,1609 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Assistec Inova - Admin</title>
+    
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.0/package/dist/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Outfit:wght@500;700;800&display=swap" rel="stylesheet">
+    
+    <script src="js/config.js"></script>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body class="bg-slate-100 text-slate-700">
+
+    <div id="adminApp" class="min-h-screen flex flex-col">
+
+        <!-- TELA DE LOGIN -->
+        <div v-if="currentView === 'login'" class="flex-grow flex items-center justify-center p-4">
+            <div class="bg-white p-8 rounded-2xl shadow-xl w-full max-w-sm text-center">
+                <div class="w-12 h-12 bg-slate-900 rounded-lg flex items-center justify-center mx-auto mb-4 text-white"><i class="fa-solid fa-shield-halved"></i></div>
+                <h2 class="text-xl font-bold mb-6">Admin Console</h2>
+                <input v-model="adminPassword" type="password" @keyup.enter="checkLogin" placeholder="Senha" class="w-full px-4 py-3 border rounded-xl mb-4 focus:border-brand outline-none">
+                <button @click="checkLogin" class="w-full bg-slate-900 text-white font-bold py-3 rounded-xl hover:bg-slate-800 transition">Entrar</button>
+                <p v-if="loginError" class="text-red-500 text-xs font-bold mt-4">Acesso Negado</p>
+            </div>
+        </div>
+
+        <!-- PAINEL DE CONTROLE -->
+        <div v-else-if="currentView === 'dashboard'" class="flex-grow">
+            
+            <!-- Barra de Navegação -->
+            <nav class="bg-white border-b border-slate-200 px-6 py-3 sticky top-0 z-30 flex justify-between items-center">
+                <div class="flex items-center gap-4">
+                    <div class="font-display font-bold text-slate-800">Assistec Inova <span class="bg-slate-100 text-slate-500 px-2 py-0.5 rounded text-xs ml-2">Admin</span></div>
+                </div>
+                
+                <!-- Abas (Navegação Dinâmica) -->
+                <div class="flex items-center gap-2">
+                    <button v-if="adminSection !== 'home'" @click="selectSection('home')" class="bg-slate-100 hover:bg-slate-200 text-slate-600 px-3 py-1.5 rounded-lg text-sm font-bold transition mr-2">
+                        <i class="fa-solid fa-arrow-left mr-1"></i> Voltar
+                    </button>
+
+                    <div v-if="adminSection === 'forms'" class="flex bg-slate-100 p-1 rounded-lg">
+                        <button @click="adminTab='manage'" :class="adminTab==='manage'?'bg-white shadow text-brand':'text-slate-500'" class="px-4 py-1.5 rounded-md text-sm font-bold transition">Gerenciar</button>
+                        <button @click="adminTab='charts'; renderChart()" :class="adminTab==='charts'?'bg-white shadow text-brand':'text-slate-500'" class="px-4 py-1.5 rounded-md text-sm font-bold transition">Visão Geral</button>
+                        <button @click="adminTab='documents'; fetchAdminDocuments()" :class="adminTab==='documents'?'bg-white shadow text-brand':'text-slate-500'" class="px-4 py-1.5 rounded-md text-sm font-bold transition">Submissões</button>
+                    </div>
+
+                    <div v-if="adminSection === 'institutions'" class="flex bg-slate-100 p-1 rounded-lg">
+                        <button @click="adminTab='calendar'" :class="adminTab==='calendar'?'bg-white shadow text-brand':'text-slate-500'" class="px-4 py-1.5 rounded-md text-sm font-bold transition">Cronograma</button>
+                        <button @click="adminTab='timeline'" :class="adminTab==='timeline'?'bg-white shadow text-brand':'text-slate-500'" class="px-4 py-1.5 rounded-md text-sm font-bold transition">Timeline</button>
+                        <button @click="adminTab='chat'; loadChatChannels()" :class="adminTab==='chat'?'bg-white shadow text-brand':'text-slate-500'" class="px-4 py-1.5 rounded-md text-sm font-bold transition">Mensagens</button>
+                    </div>
+
+                    <div v-if="adminSection === 'specialists'" class="flex bg-slate-100 p-1 rounded-lg">
+                        <button @click="adminTab='specialists_dashboard'" :class="adminTab==='specialists_dashboard'?'bg-white shadow text-brand':'text-slate-500'" class="px-4 py-1.5 rounded-md text-sm font-bold transition">Visão Geral</button>
+                        <button @click="adminTab='teams'" :class="adminTab==='teams'?'bg-white shadow text-brand':'text-slate-500'" class="px-4 py-1.5 rounded-md text-sm font-bold transition">Grupos de Trabalho</button>
+                    </div>
+
+                    <div v-if="adminSection === 'config'" class="flex bg-slate-100 p-1 rounded-lg">
+                        <button @click="adminTab='config'" :class="adminTab==='config'?'bg-white shadow text-brand':'text-slate-500'" class="px-4 py-1.5 rounded-md text-sm font-bold transition">Geral</button>
+                        <button @click="adminTab='access'" :class="adminTab==='access'?'bg-white shadow text-brand':'text-slate-500'" class="px-4 py-1.5 rounded-md text-sm font-bold transition">Acessos (ICTs)</button>
+                        <button @click="adminTab='specialists_list'; fetchSpecialists()" :class="adminTab==='specialists_list'?'bg-white shadow text-brand':'text-slate-500'" class="px-4 py-1.5 rounded-md text-sm font-bold transition">Especialistas</button>
+                    </div>
+                </div>
+
+                <div class="flex gap-2">
+                    <button @click="logout" class="text-slate-400 hover:text-red-500 px-3"><i class="fa-solid fa-power-off"></i></button>
+                </div>
+            </nav>
+
+            <main class="container mx-auto px-4 py-8 max-w-6xl">
+
+                <!-- HOME DASHBOARD (SELEÇÃO DE MÓDULO) -->
+                <div v-if="adminSection === 'home'" class="animate-fade-in-up">
+                    <h2 class="text-2xl font-bold text-slate-800 mb-2">Bem-vindo ao Painel Administrativo</h2>
+                    <p class="text-slate-500 mb-8">Selecione um módulo para gerenciar.</p>
+
+                    <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
+                        <!-- Card: Formulários -->
+                        <div @click="selectSection('forms')" class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 hover:shadow-md hover:border-brand transition cursor-pointer group">
+                            <div class="w-12 h-12 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center text-xl mb-4 group-hover:scale-110 transition-transform">
+                                <i class="fa-solid fa-clipboard-list"></i>
+                            </div>
+                            <h3 class="font-bold text-lg text-slate-800 mb-2">Formulários</h3>
+                            <p class="text-sm text-slate-500">Monitore inscrições, visualize gráficos e gerencie submissões.</p>
+                        </div>
+
+                        <!-- Card: Instituições -->
+                        <div @click="selectSection('institutions')" class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 hover:shadow-md hover:border-brand transition cursor-pointer group">
+                            <div class="w-12 h-12 bg-green-50 text-green-600 rounded-xl flex items-center justify-center text-xl mb-4 group-hover:scale-110 transition-transform">
+                                <i class="fa-solid fa-building-columns"></i>
+                            </div>
+                            <h3 class="font-bold text-lg text-slate-800 mb-2">Instituições</h3>
+                            <p class="text-sm text-slate-500">Cronogramas, timeline, chaves de acesso e comunicação.</p>
+                        </div>
+
+                        <!-- Card: Especialistas -->
+                        <div @click="selectSection('specialists')" class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 hover:shadow-md hover:border-brand transition cursor-pointer group">
+                            <div class="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center text-xl mb-4 group-hover:scale-110 transition-transform">
+                                <i class="fa-solid fa-users-gear"></i>
+                            </div>
+                            <h3 class="font-bold text-lg text-slate-800 mb-2">Especialistas</h3>
+                            <p class="text-sm text-slate-500">Gerencie grupos de trabalho e cadastro de especialistas.</p>
+                        </div>
+
+                        <!-- Card: Configurações -->
+                        <div @click="selectSection('config')" class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 hover:shadow-md hover:border-brand transition cursor-pointer group">
+                            <div class="w-12 h-12 bg-slate-50 text-slate-600 rounded-xl flex items-center justify-center text-xl mb-4 group-hover:scale-110 transition-transform">
+                                <i class="fa-solid fa-cog"></i>
+                            </div>
+                            <h3 class="font-bold text-lg text-slate-800 mb-2">Configurações</h3>
+                            <p class="text-sm text-slate-500">Importação de dados e parâmetros do sistema.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- CONTEÚDO DOS MÓDULOS -->
+                <div v-else>
+
+                <!-- FILTRO DE EDITAL (INSTITUIÇÕES) -->
+                <div v-if="adminSection === 'institutions'" class="mb-6 flex justify-between items-center bg-white p-4 rounded-xl shadow-sm border border-slate-200 animate-fade-in">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-full bg-green-50 text-green-600 flex items-center justify-center"><i class="fa-solid fa-filter"></i></div>
+                        <div>
+                            <h3 class="font-bold text-slate-800 text-sm">Filtrar por Edital</h3>
+                            <p class="text-xs text-slate-500">Visualize dados de um edital específico</p>
+                        </div>
+                    </div>
+                    <div class="relative group">
+                        <select v-model="currentFormId" class="bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-lg px-3 py-1.5 pr-8 outline-none focus:border-brand appearance-none cursor-pointer min-w-[200px]">
+                            <option :value="null">Todos os Editais</option>
+                            <option v-for="form in formsList" :key="form.id" :value="form.id">{{ form.title }}</option>
+                        </select>
+                        <i class="fa-solid fa-chevron-down absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs pointer-events-none"></i>
+                    </div>
+                </div>
+
+                <!-- ABA: CHAT (ADMIN) -->
+                <div v-show="adminTab === 'chat'" class="animate-fade-in-up h-[600px] bg-white rounded-xl shadow-sm border border-slate-200 flex overflow-hidden">
+                    <!-- Sidebar de Canais -->
+                    <div class="w-64 bg-slate-50 border-r border-slate-200 flex flex-col">
+                        <div class="p-4 border-b border-slate-200 flex justify-between items-center">
+                            <h3 class="font-bold text-slate-700 text-sm">Canais</h3>
+                            <button @click="showNewChannelModal = true" class="text-brand hover:bg-brand/10 p-1 rounded transition" title="Novo Canal"><i class="fa-solid fa-plus"></i></button>
+                        </div>
+                        <div class="flex-grow overflow-y-auto p-2 space-y-1">
+                            <div v-for="channel in chatChannels" :key="channel.id" 
+                                 @click="selectChannel(channel)"
+                                 class="px-3 py-2 rounded-lg cursor-pointer text-sm flex items-center gap-2 transition-colors group"
+                                 :class="currentChannel && currentChannel.id === channel.id ? 'bg-white shadow-sm text-brand font-bold' : 'text-slate-600 hover:bg-slate-100'">
+                                <i class="fa-solid" :class="getChannelIcon(channel.type)"></i>
+                                <span class="truncate flex-grow">{{ channel.name }}</span>
+                                <button @click.stop="deleteChannel(channel)" class="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-red-500 transition"><i class="fa-solid fa-trash text-xs"></i></button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Área de Chat -->
+                    <div class="flex-grow flex flex-col bg-white">
+                        <!-- Header do Chat -->
+                        <div class="h-14 border-b border-slate-100 flex items-center px-6 justify-between">
+                            <div v-if="currentChannel" class="flex items-center gap-2">
+                                <i class="fa-solid text-slate-400" :class="getChannelIcon(currentChannel.type)"></i>
+                                <div>
+                                    <h4 class="font-bold text-slate-800 text-sm">{{ currentChannel.name }} <span class="bg-slate-100 text-slate-500 text-[10px] px-1.5 py-0.5 rounded ml-2 uppercase">Admin View</span></h4>
+                                    <p class="text-[10px] text-slate-400">{{ getChannelDescription(currentChannel.type) }}</p>
+                                </div>
+                            </div>
+                            <div v-else class="text-slate-400 text-sm italic">Selecione um canal para moderar</div>
+                        </div>
+
+                        <!-- Lista de Mensagens -->
+                        <div class="flex-grow overflow-y-auto p-6 space-y-4 bg-slate-50/30" id="adminChatMessagesContainer">
+                            <div v-if="!currentChannel" class="h-full flex flex-col items-center justify-center text-slate-300">
+                                <i class="fa-solid fa-user-shield text-4xl mb-2"></i>
+                                <p>Painel de Moderação de Chat</p>
+                            </div>
+                            <div v-else-if="chatMessages.length === 0" class="text-center py-10 text-slate-400 text-sm">
+                                Nenhuma mensagem neste canal.
+                            </div>
+                            <div v-for="msg in chatMessages" :key="msg.id" class="flex flex-col" :class="msg.isMe ? 'items-end' : 'items-start'">
+                                <div class="flex items-end gap-2 max-w-[80%] group">
+                                    <div v-if="!msg.isMe" class="w-6 h-6 rounded-full bg-slate-200 flex items-center justify-center text-[10px] font-bold text-slate-500 shrink-0" :title="msg.senderName">
+                                        {{ msg.senderInitials }}
+                                    </div>
+                                    <div>
+                                        <div v-if="!msg.isMe" class="text-[10px] text-slate-400 ml-1 mb-0.5 flex items-center gap-2">
+                                            {{ msg.senderName }}
+                                            <span v-if="msg.portal_id" class="text-[9px] bg-slate-100 px-1 rounded text-slate-500">ID: {{ msg.portal_id }}</span>
+                                        </div>
+                                        <div class="px-4 py-2 rounded-2xl text-sm shadow-sm relative" 
+                                             :class="msg.isMe ? 'bg-slate-800 text-white rounded-br-none' : 'bg-white border border-slate-100 text-slate-700 rounded-bl-none'">
+                                            {{ msg.content }}
+                                        </div>
+                                        <div class="text-[9px] text-slate-300 mt-1 text-right mr-1 flex justify-end gap-2">
+                                            <span>{{ formatTime(msg.created_at) }}</span>
+                                            <button @click="deleteMessage(msg)" class="text-red-400 hover:text-red-600 opacity-0 group-hover:opacity-100 transition font-bold">Excluir</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Input de Mensagem (Admin) -->
+                        <div class="p-4 border-t border-slate-100 bg-white">
+                            <form @submit.prevent="sendMessage" class="flex gap-2">
+                                <div class="flex items-center justify-center w-10 h-10 bg-slate-800 text-white rounded-xl" title="Você está enviando como Administrador">
+                                    <i class="fa-solid fa-shield-halved text-sm"></i>
+                                </div>
+                                <input v-model="newMessage" type="text" :disabled="!currentChannel" placeholder="Enviar mensagem como Admin..." class="flex-grow px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:border-slate-800 outline-none text-sm transition disabled:opacity-50">
+                                <button type="submit" :disabled="!currentChannel || !newMessage.trim()" class="bg-slate-800 hover:bg-black text-white w-10 h-10 rounded-xl flex items-center justify-center transition disabled:opacity-50 disabled:cursor-not-allowed shadow-sm">
+                                    <i class="fa-solid fa-paper-plane text-sm"></i>
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ABA: GERENCIAR (FORMULÁRIOS) -->
+                <div v-show="adminTab === 'manage'" class="animate-fade-in-up space-y-6">
+                    <div class="flex justify-between items-center">
+                        <div class="bg-blue-50 border border-blue-100 rounded-xl p-4 text-sm text-blue-800 flex gap-3 flex-grow mr-4">
+                            <i class="fa-solid fa-clipboard-list mt-0.5"></i>
+                            <div>
+                                <strong>Gestão de Formulários:</strong>
+                                Crie, edite e gerencie os editais e trilhas disponíveis.
+                            </div>
+                        </div>
+                        <button @click="openFormModal()" class="bg-brand hover:bg-brandDark text-white px-4 py-2 rounded-lg text-sm font-bold shadow-lg shadow-brand/20 transition flex items-center gap-2 whitespace-nowrap h-fit">
+                            <i class="fa-solid fa-plus"></i> Novo Formulário
+                        </button>
+                    </div>
+
+                    <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                        <table class="w-full text-sm text-left">
+                            <thead class="bg-slate-50 text-xs text-slate-500 uppercase border-b border-slate-200">
+                                <tr>
+                                    <th class="px-6 py-3">Título</th>
+                                    <th class="px-6 py-3">Categoria</th>
+                                    <th class="px-6 py-3">Criado em</th>
+                                    <th class="px-6 py-3 text-right">Ações</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-slate-100">
+                                <tr v-if="formsList.length === 0">
+                                    <td colspan="4" class="px-6 py-8 text-center text-slate-400 italic">Nenhum formulário criado.</td>
+                                </tr>
+                                <tr v-for="form in formsList" :key="form.id" class="hover:bg-slate-50" :class="{'bg-blue-50/30': currentFormId === form.id}">
+                                    <td class="px-6 py-4 font-bold text-slate-700">
+                                        {{ form.title }}
+                                        <span v-if="currentFormId === form.id" class="ml-2 text-[10px] bg-blue-100 text-blue-600 px-2 py-0.5 rounded-full uppercase tracking-wide">Selecionado</span>
+                                    </td>
+                                    <td class="px-6 py-4 text-slate-600">{{ form.category || '-' }}</td>
+                                    <td class="px-6 py-4 text-slate-500 text-xs">{{ formatDate(form.created_at) }}</td>
+                                    <td class="px-6 py-4 text-right flex justify-end gap-2">
+                                        <button @click="currentFormId = form.id; adminTab = 'charts'; renderChart()" class="text-slate-400 hover:text-blue-600 p-1.5 rounded transition" title="Ver Dashboard"><i class="fa-solid fa-chart-pie"></i></button>
+                                        <button @click="openFormModal(form.id)" class="text-slate-400 hover:text-brand p-1.5 rounded transition" title="Editar"><i class="fa-solid fa-pen"></i></button>
+                                        <button @click="deleteForm(form.id)" class="text-slate-400 hover:text-red-500 p-1.5 rounded transition" title="Excluir"><i class="fa-solid fa-trash"></i></button>
+                                        <button @click="currentFormId = form.id; copyFormLink()" class="text-slate-400 hover:text-brand p-1.5 rounded transition" title="Copiar Link"><i class="fa-solid fa-link"></i></button>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- ABA: GRÁFICOS -->
+                <div v-show="adminTab === 'charts'" class="space-y-6 animate-fade-in-up">
+                    <!-- FILTRO DE EDITAL (GRÁFICOS) -->
+                    <div class="flex justify-between items-center bg-white p-4 rounded-xl shadow-sm border border-slate-200 mb-6">
+                        <div class="flex items-center gap-3">
+                            <div class="w-10 h-10 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center"><i class="fa-solid fa-filter"></i></div>
+                            <div>
+                                <h3 class="font-bold text-slate-800 text-sm">Visualizando Dados de:</h3>
+                                <p class="text-xs text-slate-500" v-if="currentFormId">{{ formsList.find(f => f.id === currentFormId)?.title }}</p>
+                                <p class="text-xs text-slate-500" v-else>Todas as Trilhas</p>
+                            </div>
+                        </div>
+                        <div class="relative group">
+                            <select v-model="currentFormId" class="bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-lg px-3 py-1.5 pr-8 outline-none focus:border-brand appearance-none cursor-pointer min-w-[200px]">
+                                <option :value="null">Todas as Trilhas</option>
+                                <option v-for="form in formsList" :key="form.id" :value="form.id">{{ form.title }}</option>
+                            </select>
+                            <i class="fa-solid fa-chevron-down absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs pointer-events-none"></i>
+                        </div>
+                    </div>
+
+                    <div class="flex justify-between items-center">
+                        <h3 class="text-lg font-bold text-slate-700">Resumo Geral</h3>
+                        <button @click="exportToExcel" class="bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-green-700 transition shadow-sm">
+                            <i class="fa-solid fa-file-csv mr-2"></i> Exportar Dados (.xlsx)
+                        </button>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-5">
+                        <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex items-center justify-between">
+                            <div>
+                                <p class="text-xs text-slate-400 uppercase font-bold tracking-wider mb-1">Total Respostas</p>
+                                <p class="text-3xl font-display font-bold text-slate-800">{{ dbSubmissions.length }}</p>
+                            </div>
+                            <div class="w-12 h-12 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center text-xl"><i class="fa-solid fa-users"></i></div>
+                        </div>
+                        <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex items-center justify-between">
+                            <div>
+                                <p class="text-xs text-slate-400 uppercase font-bold tracking-wider mb-1">Campi Aderentes</p>
+                                <p class="text-3xl font-display font-bold text-slate-800">{{ totalCampiCount }}</p>
+                            </div>
+                            <div class="w-12 h-12 bg-green-50 text-green-600 rounded-full flex items-center justify-center text-xl"><i class="fa-solid fa-map-marked-alt"></i></div>
+                        </div>
+                        <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex items-center justify-between">
+                            <div>
+                                <p class="text-xs text-slate-400 uppercase font-bold tracking-wider mb-1">ICTs Únicas</p>
+                                <p class="text-3xl font-display font-bold text-slate-800">{{ consolidatedData.length }}</p>
+                            </div>
+                            <div class="w-12 h-12 bg-purple-50 text-purple-600 rounded-full flex items-center justify-center text-xl"><i class="fa-solid fa-university"></i></div>
+                        </div>
+                    </div>
+                    <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200 h-80">
+                        <canvas id="resultsChart"></canvas>
+                    </div>
+
+                    <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                        <div class="px-6 py-4 bg-slate-50 border-b border-slate-100 font-bold text-slate-700 text-sm uppercase tracking-wide">Detalhamento por ICT</div>
+                        <div v-for="data in consolidatedData" :key="data.ictName" class="border-b border-slate-100 last:border-0">
+                            <div @click="toggleIctExpansion(data.ictName)" class="px-6 py-4 flex justify-between items-center cursor-pointer hover:bg-slate-50 transition-colors">
+                                <div class="flex items-center gap-3">
+                                    <div class="w-8 h-8 rounded bg-brand/10 text-brand flex items-center justify-center text-sm font-bold">
+                                        {{ data.ictName.substring(0,2).toUpperCase() }}
+                                    </div>
+                                    <div>
+                                        <span class="font-bold text-slate-800 block">{{ data.ictName }}</span>
+                                        <span class="text-xs text-slate-400">{{ data.respondents.size }} responsável(is)</span>
+                                    </div>
+                                </div>
+                                <div class="flex items-center gap-4">
+                                    <span class="bg-slate-100 text-slate-600 text-xs font-bold px-3 py-1 rounded-full border border-slate-200">{{ data.uniqueCampiCount }} Campi</span>
+                                    <i class="fa-solid fa-chevron-down text-slate-300 transition-transform duration-300" :class="{'rotate-180': isIctExpanded(data.ictName)}"></i>
+                                </div>
+                            </div>
+                            <div v-show="isIctExpanded(data.ictName)" class="px-6 py-4 bg-slate-50/50 text-sm border-t border-slate-100 animate-fade-in-up">
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                    <div>
+                                        <p class="font-bold text-slate-400 text-xs uppercase mb-2">Campi Selecionados</p>
+                                        <ul class="space-y-1">
+                                            <li v-for="c in Array.from(data.uniqueCampiNames).sort()" :key="c" class="text-slate-600 flex items-center gap-2">
+                                                <i class="fa-solid fa-check text-green-500 text-xs"></i> {{ c }}
+                                            </li>
+                                        </ul>
+                                    </div>
+                                    <div>
+                                        <p class="font-bold text-slate-400 text-xs uppercase mb-2">Contatos</p>
+                                        <ul class="space-y-1">
+                                            <li v-for="e in data.respondents" :key="e" class="text-slate-600 flex items-center gap-2">
+                                                <i class="fa-regular fa-envelope text-slate-400 text-xs"></i> {{ e }}
+                                            </li>
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- TAB: CALENDAR (Refatorado com Wizard) -->
+                <div v-show="adminTab === 'calendar'" class="animate-fade-in-up space-y-6">
+                    
+                    <!-- Wizard de Criação de Evento -->
+                    <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+                        <div class="mb-4 pb-4 border-b border-slate-100 flex justify-between items-center">
+                            <div>
+                                <h3 class="font-bold text-lg text-slate-800">Adicionar Período de Indisponibilidade</h3>
+                                <p class="text-sm text-slate-500">Adicione eventos rapidamente usando o formulário abaixo.</p>
+                            </div>
+                        </div>
+                        
+                        <div class="space-y-4">
+                            <!-- Seleção de Escopo (Wizard Style) -->
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <!-- ICT Selection -->
+                                <div class="relative group">
+                                    <label class="block text-xs font-bold text-slate-500 mb-1.5 flex justify-between">
+                                        Instituição (ICT)
+                                        <button v-if="wizardSelectedIcts.length > 0" @click="wizardSelectedIcts = []; wizardSelectedCampi = []" class="text-[10px] text-red-500 hover:underline">Limpar</button>
+                                    </label>
+                                    <div class="min-h-[42px] w-full px-3 py-2 border rounded-lg text-sm focus-within:border-brand bg-white flex flex-wrap gap-2 items-center transition-colors">
+                                        <!-- Pills -->
+                                        <span v-for="(ict, idx) in wizardSelectedIcts" :key="idx" class="bg-slate-100 text-slate-700 px-2 py-1 rounded text-xs font-bold flex items-center gap-1 border border-slate-200">
+                                            {{ ict === 'ALL' ? 'Todas as Instituições' : ict.ictName }}
+                                            <button @click.stop="removeWizardIct(idx)" class="hover:text-red-500 w-4 h-4 flex items-center justify-center rounded-full hover:bg-slate-200 transition"><i class="fa-solid fa-times text-[10px]"></i></button>
+                                        </span>
+                                        <!-- Input -->
+                                        <input 
+                                            v-if="!wizardSelectedIcts.includes('ALL')"
+                                            id="ictSearchInput_inline"
+                                            type="text" 
+                                            v-model="ictSearch" 
+                                            @focus="showIctDropdown = true"
+                                            placeholder="Buscar..." 
+                                            class="flex-grow outline-none min-w-[80px] bg-transparent"
+                                        >
+                                    </div>
+                                    <div v-if="showIctDropdown && wizardIctOptions.length > 0" class="absolute z-20 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-48 overflow-y-auto animate-fade-in">
+                                        <div 
+                                            v-for="opt in wizardIctOptions" 
+                                            :key="opt === 'ALL' ? 'ALL' : opt.ictName"
+                                            @click="selectWizardIct(opt, 'ictSearchInput_inline')"
+                                            class="px-3 py-2 hover:bg-slate-50 cursor-pointer text-sm text-slate-700 border-b border-slate-50 last:border-0"
+                                        >
+                                            {{ opt === 'ALL' ? 'Todas as Instituições' : opt.ictName }}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Campus Selection -->
+                                <div class="relative group">
+                                    <label class="block text-xs font-bold text-slate-500 mb-1.5 flex justify-between">
+                                        Campus
+                                        <button v-if="wizardSelectedCampi.length > 0" @click="wizardSelectedCampi = []" class="text-[10px] text-red-500 hover:underline">Limpar</button>
+                                    </label>
+                                    <div class="min-h-[42px] w-full px-3 py-2 border rounded-lg text-sm focus-within:border-brand bg-white flex flex-wrap gap-2 items-center transition-colors" :class="{'bg-slate-50': wizardSelectedIcts.length === 0 || (wizardSelectedIcts.length > 0 && wizardSelectedIcts[0] === 'ALL')}">
+                                        <!-- Pills -->
+                                        <span v-for="(campus, idx) in wizardSelectedCampi" :key="idx" class="bg-slate-100 text-slate-700 px-2 py-1 rounded text-xs font-bold flex items-center gap-1 border border-slate-200">
+                                            {{ campus.name }}
+                                            <button @click.stop="removeWizardCampus(idx)" class="hover:text-red-500 w-4 h-4 flex items-center justify-center rounded-full hover:bg-slate-200 transition"><i class="fa-solid fa-times text-[10px]"></i></button>
+                                        </span>
+                                        <!-- Input -->
+                                        <input 
+                                            v-if="!wizardSelectedCampi.includes('ALL')"
+                                            id="campusSearchInput_inline"
+                                            type="text" 
+                                            v-model="campusSearch" 
+                                            @focus="showCampusDropdown = true"
+                                            :disabled="wizardSelectedIcts.length === 0 || (wizardSelectedIcts.length > 0 && wizardSelectedIcts[0] === 'ALL')"
+                                            :placeholder="(wizardSelectedIcts.length === 0 || (wizardSelectedIcts.length > 0 && wizardSelectedIcts[0] === 'ALL')) ? 'Selecione uma ICT específica' : 'Buscar...'" 
+                                            class="flex-grow outline-none min-w-[80px] bg-transparent disabled:text-slate-400"
+                                        >
+                                    </div>
+                                    <div v-if="showCampusDropdown && wizardCampusOptions.length > 0" class="absolute z-20 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-48 overflow-y-auto animate-fade-in">
+                                        <div 
+                                            v-for="opt in wizardCampusOptions" 
+                                            :key="opt === 'ALL' ? 'ALL' : opt.id"
+                                            @click="selectWizardCampus(opt, 'campusSearchInput_inline')"
+                                            class="px-3 py-2 hover:bg-slate-50 cursor-pointer text-sm text-slate-700 border-b border-slate-50 last:border-0"
+                                        >
+                                            {{ opt === 'ALL' ? 'Todos os Campi' : opt.name }}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Categoria e Datas -->
+                            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                <div>
+                                    <label class="block text-xs font-bold text-slate-500 mb-1.5 flex justify-between">
+                                        Categoria 
+                                        <button @click="showCategoryModal = true" class="text-[10px] text-brand hover:underline">+ Nova</button>
+                                    </label>
+                                    <select v-model="inlineEventForm.category" class="w-full px-3 py-2 border rounded-lg text-sm focus:border-brand outline-none bg-white">
+                                        <option v-for="(color, cat) in categoryColors" :key="cat" :value="cat">{{ cat }}</option>
+                                    </select>
+                                </div>
+                                <div><label class="block text-xs font-bold text-slate-500 mb-1.5">Início</label><input v-model="inlineEventForm.start" type="date" class="w-full px-3 py-2 border rounded-lg text-sm"></div>
+                                <div><label class="block text-xs font-bold text-slate-500 mb-1.5">Fim</label><input v-model="inlineEventForm.end" type="date" class="w-full px-3 py-2 border rounded-lg text-sm"></div>
+                            </div>
+
+                            <!-- Modal de Nova Categoria (Inline) -->
+                            <div v-if="showCategoryModal" class="flex items-center gap-2 bg-slate-50 p-2 rounded-lg border border-slate-200 animate-fade-in">
+                                <input v-model="newCategoryName" type="text" placeholder="Nome da Categoria" class="text-xs px-2 py-1 rounded border">
+                                <input v-model="newCategoryColor" type="color" class="h-6 w-6 cursor-pointer">
+                                <button @click="addCustomCategory" class="text-xs bg-green-500 text-white px-2 py-1 rounded hover:bg-green-600">Salvar</button>
+                                <button @click="showCategoryModal = false" class="text-xs text-slate-400 hover:text-slate-600"><i class="fa-solid fa-times"></i></button>
+                            </div>
+
+                            <div class="pt-4 border-t border-slate-100 flex justify-end">
+                                <button @click="submitInlineEvent" class="bg-brand hover:bg-brandDark text-white font-bold py-2.5 px-6 rounded-lg text-sm transition shadow-lg">
+                                    Adicionar Evento
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Conteúdo Detalhado (Sempre Visível) -->
+                    <div class="space-y-6 animate-fade-in-up">
+                        <!-- Gerenciador de Eventos (Tabela) -->
+                        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                            <div class="px-6 py-4 bg-slate-50 border-b border-slate-100 flex justify-between items-center">
+                                <div>
+                                    <h3 class="font-bold text-slate-700 text-sm uppercase tracking-wide">Lista de Eventos</h3>
+                                </div>
+                                <div class="flex items-center gap-2 w-1/2 justify-end">
+                                    <div class="relative w-full max-w-[200px]">
+                                        <i class="fa-solid fa-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
+                                        <input v-model="eventListFilter" type="text" placeholder="Filtrar eventos..." class="w-full pl-8 pr-4 py-1.5 text-xs rounded-lg border border-slate-200 focus:border-brand outline-none">
+                                    </div>
+                                    
+                                    <!-- Bulk Actions -->
+                                    <button v-if="selectedEvents.length > 0" @click="deleteSelectedEvents" class="bg-red-100 hover:bg-red-200 text-red-600 px-3 py-2 rounded-lg text-xs font-bold transition-colors flex items-center gap-2 whitespace-nowrap" title="Excluir Selecionados">
+                                        <i class="fa-solid fa-trash"></i> <span class="hidden sm:inline">{{ selectedEvents.length }}</span>
+                                    </button>
+
+                                    <button @click="exportEventsToCSV" class="bg-slate-100 hover:bg-slate-200 text-slate-600 px-3 py-2 rounded-lg text-xs font-bold transition-colors flex items-center gap-2 whitespace-nowrap" title="Exportar Eventos">
+                                        <i class="fa-solid fa-file-export"></i> Exportar
+                                    </button>
+
+                                    <button @click="saveEvents" :disabled="saving" class="bg-slate-800 hover:bg-black text-white px-4 py-2 rounded-lg text-xs font-bold transition-colors flex items-center gap-2 whitespace-nowrap">
+                                        <i class="fa-solid fa-save"></i> Salvar
+                                    </button>
+                                </div>
+                            </div>
+                            
+                            <!-- Lista de Eventos (Tabela) -->
+                            <div class="overflow-x-auto max-h-80">
+                                <table class="w-full text-sm text-left">
+                                    <thead class="bg-slate-100 text-xs text-slate-500 uppercase sticky top-0 z-10">
+                                        <tr>
+                                            <th class="px-4 py-2 w-10 text-center">
+                                                <input type="checkbox" @change="toggleSelectAllEvents" :checked="isAllEventsSelected" class="rounded border-slate-300 text-brand focus:ring-brand">
+                                            </th>
+                                            <th class="px-4 py-2">Título</th>
+                                            <th class="px-4 py-2">Categoria</th>
+                                            <th class="px-4 py-2">Período</th>
+                                            <th class="px-4 py-2">Escopo</th>
+                                            <th class="px-4 py-2 text-right">Ações</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="divide-y divide-slate-100">
+                                        <tr v-if="filteredEventList.length === 0">
+                                            <td colspan="6" class="text-center py-8 text-slate-400">Nenhum evento encontrado.</td>
+                                        </tr>
+                                        <tr v-for="(evt, idx) in filteredEventList" :key="idx" class="hover:bg-slate-50" :class="{'bg-blue-50/50': selectedEvents.includes(evt)}">
+                                            <td class="px-4 py-3 text-center">
+                                                <input type="checkbox" :value="evt" v-model="selectedEvents" class="rounded border-slate-300 text-brand focus:ring-brand">
+                                            </td>
+                                            <td class="px-4 py-3 font-medium text-slate-800">{{ evt.title }}</td>
+                                            <td class="px-4 py-3"><span class="text-xs font-bold bg-slate-100 px-2 py-0.5 rounded border border-slate-200">{{ evt.category }}</span></td>
+                                            <td class="px-4 py-3 font-mono text-xs whitespace-nowrap">{{ formatDate(evt.start) }} - {{ formatDate(evt.end) }}</td>
+                                            <td class="px-4 py-3 text-xs" :title="getScopeLabel(evt)">
+                                                <div class="flex items-center gap-1 max-w-[200px] truncate">
+                                                    <i class="fa-solid" :class="getScopeIcon(evt.scope)"></i> 
+                                                    {{ getScopeLabel(evt) }}
+                                                </div>
+                                            </td>
+                                            <td class="px-4 py-3 text-right">
+                                                <button @click="openEventModal(evt, idx)" class="w-8 h-8 rounded-lg text-slate-400 hover:bg-slate-200 hover:text-brand transition-colors"><i class="fa-solid fa-pen"></i></button>
+                                                <button @click="removeEvent(idx)" class="w-8 h-8 rounded-lg text-slate-400 hover:bg-slate-200 hover:text-red-500 transition-colors"><i class="fa-solid fa-trash-can"></i></button>
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <!-- Status de Preenchimento -->
+                        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-4">
+                            <div class="flex items-center justify-between cursor-pointer" @click="showCoverageDetails = !showCoverageDetails">
+                                <div class="flex items-center gap-4">
+                                    <div class="w-10 h-10 rounded-full flex items-center justify-center transition-colors" :class="coverageStats.ict.percent === 100 ? 'bg-green-100 text-green-600' : 'bg-orange-100 text-orange-600'">
+                                        <i class="fa-solid" :class="coverageStats.ict.percent === 100 ? 'fa-check' : 'fa-exclamation'"></i>
+                                    </div>
+                                    <div>
+                                        <h4 class="font-bold text-slate-700 text-sm">Cobertura de Dados (ICTs)</h4>
+                                        <p class="text-xs text-slate-500">
+                                            {{ coverageStats.ict.withData }} de {{ coverageStats.ict.total }} instituições possuem eventos registrados ({{ coverageStats.ict.percent }}%)
+                                        </p>
+                                    </div>
+                                </div>
+                                <i class="fa-solid fa-chevron-down text-slate-400 transition-transform" :class="{'rotate-180': showCoverageDetails}"></i>
+                            </div>
+
+                            <div v-if="showCoverageDetails" class="mt-4 pt-4 border-t border-slate-100 animate-fade-in">
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                    <!-- ICTs Pendentes -->
+                                    <div>
+                                        <h5 class="text-xs font-bold text-slate-500 uppercase mb-2">ICTs Sem Dados ({{ coverageStats.ict.withoutData.length }})</h5>
+                                        <div v-if="coverageStats.ict.withoutData.length === 0" class="text-sm text-green-600 flex items-center gap-2">
+                                            <i class="fa-solid fa-check-circle"></i> Todas as ICTs possuem dados!
+                                        </div>
+                                        <div v-else class="max-h-40 overflow-y-auto space-y-1 pr-2 custom-scrollbar">
+                                            <div v-for="ict in coverageStats.ict.withoutData" :key="ict" class="text-xs bg-slate-50 p-2 rounded border border-slate-100 text-slate-600 flex justify-between items-center group">
+                                                {{ ict }}
+                                                <button @click="openEventModal(); wizardSelectedIcts=[{ictName: ict}]" class="text-brand opacity-0 group-hover:opacity-100 hover:underline font-bold">Adicionar</button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- Campi Pendentes -->
+                                    <div>
+                                        <h5 class="text-xs font-bold text-slate-500 uppercase mb-2">Campi Sem Dados ({{ coverageStats.campus.withoutData.length }})</h5>
+                                        <div v-if="coverageStats.campus.withoutData.length === 0" class="text-sm text-green-600 flex items-center gap-2">
+                                            <i class="fa-solid fa-check-circle"></i> Todos os Campi possuem dados!
+                                        </div>
+                                        <div v-else class="max-h-40 overflow-y-auto space-y-1 pr-2 custom-scrollbar">
+                                            <div v-for="c in coverageStats.campus.withoutData" :key="c.id" class="text-xs bg-slate-50 p-2 rounded border border-slate-100 text-slate-600">
+                                                <span class="font-bold">{{ c.name }}</span> <span class="text-slate-400">({{ c.ict }})</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Calendário de Disponibilidade -->
+                        <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
+                            <!-- Legenda -->
+                            <div class="lg:col-span-1 space-y-4">
+                                 <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-5">
+                                    <h3 class="font-bold text-slate-700 text-sm uppercase tracking-wide mb-3">Legenda de Impacto</h3>
+                                    <div class="space-y-2 text-xs font-medium text-slate-600">
+                                        <div class="flex items-center gap-2"><div class="w-4 h-4 rounded bg-white border border-slate-200"></div> Livre (0%)</div>
+                                        <div class="flex items-center gap-2"><div class="w-4 h-4 rounded bg-emerald-100 border border-emerald-200"></div> Baixa (1-10%)</div>
+                                        <div class="flex items-center gap-2"><div class="w-4 h-4 rounded bg-yellow-100 border border-yellow-200"></div> Atenção (10-40%)</div>
+                                        <div class="flex items-center gap-2"><div class="w-4 h-4 rounded bg-orange-100 border border-orange-200"></div> Crítico (40-80%)</div>
+                                        <div class="flex items-center gap-2"><div class="w-4 h-4 rounded bg-red-100 border border-red-200"></div> Bloqueio (>80%)</div>
+                                    </div>
+                                 </div>
+                            </div>
+                            <!-- Calendário Principal -->
+                            <div class="lg:col-span-3 bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+                                <div class="flex justify-between items-center mb-4 border-b border-slate-100 pb-4">
+                                    <h3 class="text-lg font-bold text-slate-800">Calendário de Disponibilidade</h3>
+                                    <div class="flex items-center gap-2">
+                                        <!-- View Mode Toggle -->
+                                        <div class="flex bg-slate-100 p-1 rounded-lg">
+                                            <button @click="calendarViewMode = 'ict'" :class="calendarViewMode === 'ict' ? 'bg-white shadow-sm text-brand' : 'text-slate-500 hover:text-slate-700'" class="px-3 py-1 rounded-md text-xs font-bold transition">ICTs</button>
+                                            <button @click="calendarViewMode = 'campus'" :class="calendarViewMode === 'campus' ? 'bg-white shadow-sm text-brand' : 'text-slate-500 hover:text-slate-700'" class="px-3 py-1 rounded-md text-xs font-bold transition">Campi</button>
+                                        </div>
+                                        <!-- Year Selector -->
+                                        <div class="flex items-center gap-1 bg-slate-100 p-1 rounded-lg">
+                                            <button @click="calendarYear--" class="px-2 py-1 rounded-md hover:bg-white transition"><i class="fa-solid fa-chevron-left text-xs"></i></button>
+                                            <span class="font-bold text-sm w-12 text-center">{{ calendarYear }}</span>
+                                            <button @click="calendarYear++" class="px-2 py-1 rounded-md hover:bg-white transition"><i class="fa-solid fa-chevron-right text-xs"></i></button>
+                                        </div>
+                                        <!-- ICT Filter -->
+                                        <select v-model="calendarFilterIct" class="bg-white text-xs font-bold text-slate-700 py-1.5 px-3 rounded-lg border border-slate-200 outline-none focus:border-brand shadow-sm max-w-[150px] md:max-w-[200px] truncate">
+                                            <option value="">Todas as ICTs</option>
+                                            <optgroup label="Grupos Personalizados" v-if="customGroups && customGroups.length > 0">
+                                                <option v-for="grp in customGroups" :key="grp.id" :value="'GROUP:' + grp.id">{{ grp.name }}</option>
+                                            </optgroup>
+                                            <optgroup label="ICTs Individuais">
+                                                <option v-for="ict in consolidatedData" :key="ict.ictName" :value="ict.ictName">{{ ict.ictName }}</option>
+                                            </optgroup>
+                                        </select>
+                                        <button @click="exportCalendarPDF" class="bg-slate-800 text-white px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-black transition shadow-sm" title="Exportar PDF"><i class="fa-solid fa-file-pdf"></i></button>
+                                    </div>
+                                </div>
+                                <div id="calendarGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                    <div v-for="month in calendarMonths" :key="month.name" class="border border-slate-100 rounded-xl overflow-hidden shadow-sm">
+                                        <div class="bg-slate-50 px-4 py-2 font-bold text-center text-slate-700 text-sm border-b border-slate-100">{{ month.name }}</div>
+                                        <div class="grid grid-cols-7 text-center text-[10px] text-slate-400 py-1 bg-white">
+                                            <div v-for="day in ['D','S','T','Q','Q','S','S']" :key="day">{{ day }}</div>
+                                        </div>
+                                        <div class="grid grid-cols-7 text-center text-xs bg-white">
+                                            <div v-for="(day, idx) in month.days" :key="idx" 
+                                                 class="aspect-square flex flex-col items-center justify-center p-1 border-t border-r border-slate-50 cursor-pointer transition-all"
+                                                 :class="day.empty ? 'bg-slate-50/30' : day.stats.heatClass"
+                                                 @click="openDayDetails(day)">
+                                                <template v-if="!day.empty">
+                                                    <span class="font-semibold opacity-80 text-xs">{{ day.day }}</span>
+                                                    <span v-if="day.stats.total > 0" class="text-[10px] font-bold mt-1" :class="day.stats.unavailableCount > 0 ? 'text-slate-500' : 'text-slate-400'">
+                                                        {{ day.stats.unavailableCount }}/{{ day.stats.total }}
+                                                    </span>
+                                                </template>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- TAB: TIMELINE -->
+                <div v-show="adminTab === 'timeline'" class="animate-fade-in-up max-w-4xl mx-auto">
+                    <!-- Timeline Filter -->
+                    <div class="flex justify-end mb-6">
+                        <select v-model="timelineFilterIct" class="bg-white border border-slate-200 text-slate-700 text-sm rounded-lg focus:ring-brand focus:border-brand block p-2.5 outline-none shadow-sm">
+                            <option value="">Todos os Eventos</option>
+                            <optgroup label="Grupos Personalizados" v-if="customGroups && customGroups.length > 0">
+                                <option v-for="grp in customGroups" :key="grp.id" :value="'GROUP:' + grp.id">{{ grp.name }}</option>
+                            </optgroup>
+                            <optgroup label="ICTs Individuais">
+                                <option v-for="ict in consolidatedData" :key="ict.ictName" :value="ict.ictName">{{ ict.ictName }}</option>
+                            </optgroup>
+                        </select>
+                    </div>
+
+                    <div class="relative border-l-2 border-slate-200 ml-3 md:ml-6 space-y-8 py-4">
+                        <div v-for="(group, gIdx) in timelineEvents" :key="gIdx" class="relative">
+                            <!-- Month Label -->
+                            <div class="absolute -left-[21px] md:-left-[25px] bg-white border-2 border-brand text-brand rounded-full w-10 h-10 md:w-12 md:h-12 flex items-center justify-center font-bold text-[10px] md:text-xs shadow-sm z-10">
+                                <div class="flex flex-col items-center leading-tight">
+                                    <span>{{ group.monthName.substring(0,3) }}</span>
+                                    <span class="text-[8px] md:text-[10px]">{{ group.year }}</span>
+                                </div>
+                            </div>
+                            
+                            <div class="ml-8 md:ml-12 space-y-4">
+                                <div v-for="(evt, eIdx) in group.events" :key="eIdx" class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition-shadow relative">
+                                    <!-- Connector Line -->
+                                    <div class="absolute top-6 -left-8 md:-left-12 w-6 md:w-10 h-0.5 bg-slate-200"></div>
+                                    
+                                    <div class="flex justify-between items-start gap-4">
+                                        <div>
+                                            <div class="flex items-center gap-2 mb-1">
+                                                <span class="text-xs font-bold px-2 py-0.5 rounded border" :style="{ backgroundColor: categoryColors[evt.category] + '20', color: categoryColors[evt.category], borderColor: categoryColors[evt.category] + '40' }">
+                                                    {{ evt.category }}
+                                                </span>
+                                                <span class="text-xs text-slate-400 font-mono">
+                                                    {{ formatDate(evt.start) }} <span v-if="evt.start !== evt.end">- {{ formatDate(evt.end) }}</span>
+                                                </span>
+                                            </div>
+                                            <h4 class="font-bold text-slate-800 text-lg">{{ evt.title }}</h4>
+                                            <div class="mt-2 flex items-center gap-2 text-sm text-slate-600">
+                                                <i class="fa-solid" :class="getScopeIcon(evt.scope)"></i>
+                                                <span>{{ getScopeLabel(evt) }}</span>
+                                            </div>
+                                        </div>
+                                        <div class="flex gap-2">
+                                            <!-- Note: Using existing openEventModal but passing index might be tricky if not in same list order. 
+                                                 Ideally openEventModal should take the object directly or we find the index in the main list.
+                                                 For now, let's assume we can just view it or edit it if we find the index. 
+                                                 Actually, let's just show the details. Editing might be complex if indices don't match 'eventList'.
+                                                 Let's try to find the index in eventList.
+                                            -->
+                                            <button @click="openEventModal(evt)" class="text-slate-400 hover:text-brand transition-colors"><i class="fa-solid fa-pen"></i></button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div v-if="timelineEvents.length === 0" class="ml-8 md:ml-12 p-8 text-center bg-slate-50 rounded-xl border border-dashed border-slate-300 text-slate-500">
+                            <i class="fa-regular fa-calendar-xmark text-3xl mb-2 opacity-50"></i>
+                            <p>Nenhum evento registrado na timeline.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- TAB: ACCESS (CHAVES - INSTITUIÇÕES) -->
+                <div v-show="adminTab === 'access'" class="animate-fade-in-up">
+                    <div class="bg-blue-50 border border-blue-100 rounded-xl p-4 mb-6 text-sm text-blue-800 flex gap-3">
+                        <i class="fa-solid fa-info-circle mt-0.5"></i>
+                        <div>
+                            <strong>Gestão de Acessos (Instituições):</strong>
+                            Gere a chave e envie para o representante. Ele acessará o portal usando apenas este código.
+                        </div>
+                    </div>
+                    
+                    <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                        <table class="w-full text-sm text-left">
+                            <thead class="bg-slate-50 text-xs text-slate-500 uppercase border-b border-slate-200">
+                                <tr>
+                                    <th class="px-6 py-3">ICT (Submissão)</th>
+                                    <th class="px-6 py-3">Responsável / Email</th>
+                                    <th class="px-6 py-3 text-center">Chave de Acesso do Portal</th>
+                                    <th class="px-6 py-3 text-right">Ação</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-slate-100">
+                                <tr v-for="sub in dbSubmissions" :key="sub.id" class="hover:bg-slate-50">
+                                    <td class="px-6 py-4 font-medium">{{ sub.ict }}</td>
+                                    <td class="px-6 py-4">
+                                        <div class="font-bold text-slate-700">{{ sub.name }}</div>
+                                        <div class="text-xs text-slate-400">{{ sub.email }}</div>
+                                    </td>
+                                    <td class="px-6 py-4 text-center">
+                                        <div v-if="portalsByIctName[sub.ict]" class="inline-flex items-center gap-2 bg-slate-100 px-3 py-1 rounded border border-slate-200">
+                                            <span class="font-mono text-brand font-bold">{{ portalsByIctName[sub.ict].access_key }}</span>
+                                            <button @click="copyToClipboard(portalsByIctName[sub.ict].access_key)" class="text-slate-400 hover:text-slate-600"><i class="fa-regular fa-copy"></i></button>
+                                        </div>
+                                        <span v-else class="text-slate-300 text-xs italic">-- Nenhum portal criado --</span>
+                                    </td>
+                                    <td class="px-6 py-4 text-right">
+                                        <button @click="createOrUpdatePortal(sub)" class="bg-slate-800 hover:bg-black text-white px-3 py-1.5 rounded-lg text-xs font-bold transition">
+                                            <i class="fa-solid fa-key mr-1"></i> 
+                                            {{ portalsByIctName[sub.ict] ? 'Regerar Chave' : 'Criar Acesso' }}
+                                        </button>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- TAB: SPECIALISTS LIST (CONFIG) -->
+                <div v-show="adminTab === 'specialists_list'" class="animate-fade-in-up">
+                    <div class="flex justify-between items-center mb-6">
+                        <div class="bg-purple-50 border border-purple-100 rounded-xl p-4 text-sm text-purple-800 flex gap-3 flex-grow mr-4">
+                            <i class="fa-solid fa-user-tie mt-0.5"></i>
+                            <div>
+                                <strong>Gestão de Especialistas:</strong>
+                                Cadastre os especialistas que farão o acompanhamento das instituições.
+                            </div>
+                        </div>
+                        <button @click="showSpecialistModal = true" class="bg-brand hover:bg-brandDark text-white px-4 py-2 rounded-lg text-sm font-bold shadow-lg shadow-brand/20 transition flex items-center gap-2 whitespace-nowrap">
+                            <i class="fa-solid fa-plus"></i> Novo Especialista
+                        </button>
+                    </div>
+
+                    <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                        <table class="w-full text-sm text-left">
+                            <thead class="bg-slate-50 text-xs text-slate-500 uppercase border-b border-slate-200">
+                                <tr>
+                                    <th class="px-6 py-3">Nome</th>
+                                    <th class="px-6 py-3">Especialidade</th>
+                                    <th class="px-6 py-3">Email</th>
+                                    <th class="px-6 py-3 text-center">Chave de Acesso</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-slate-100">
+                                <tr v-if="specialistsList.length === 0">
+                                    <td colspan="4" class="px-6 py-8 text-center text-slate-400 italic">Nenhum especialista cadastrado.</td>
+                                </tr>
+                                <tr v-for="spec in specialistsList" :key="spec.id" class="hover:bg-slate-50">
+                                    <td class="px-6 py-4 font-bold text-slate-700">{{ spec.name }}</td>
+                                    <td class="px-6 py-4 text-slate-600">{{ spec.specialty }}</td>
+                                    <td class="px-6 py-4 text-slate-500">{{ spec.email }}</td>
+                                    <td class="px-6 py-4 text-center">
+                                        <div class="inline-flex items-center gap-2 bg-slate-100 px-3 py-1 rounded border border-slate-200">
+                                            <span class="font-mono text-brand font-bold">{{ spec.access_key }}</span>
+                                            <button @click="copyToClipboard(spec.access_key)" class="text-slate-400 hover:text-slate-600"><i class="fa-regular fa-copy"></i></button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- TAB: SPECIALISTS DASHBOARD -->
+                <div v-show="adminTab === 'specialists_dashboard'" class="animate-fade-in-up space-y-6">
+                    <!-- Stats Cards -->
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+                            <div class="flex justify-between items-start mb-4">
+                                <div class="w-10 h-10 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center"><i class="fa-solid fa-user-tie"></i></div>
+                                <span class="text-xs font-bold text-slate-400 uppercase">Total</span>
+                            </div>
+                            <h3 class="text-3xl font-bold text-slate-800">{{ specialistsList.length }}</h3>
+                            <p class="text-sm text-slate-500">Especialistas Cadastrados</p>
+                        </div>
+                        <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+                            <div class="flex justify-between items-start mb-4">
+                                <div class="w-10 h-10 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center"><i class="fa-solid fa-layer-group"></i></div>
+                                <span class="text-xs font-bold text-slate-400 uppercase">Ativos</span>
+                            </div>
+                            <h3 class="text-3xl font-bold text-slate-800">{{ editalGroups.length }}</h3>
+                            <p class="text-sm text-slate-500">Grupos de Trabalho (Edital Atual)</p>
+                        </div>
+                        <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+                            <div class="flex justify-between items-start mb-4">
+                                <div class="w-10 h-10 rounded-full bg-green-50 text-green-600 flex items-center justify-center"><i class="fa-solid fa-file-contract"></i></div>
+                                <span class="text-xs font-bold text-slate-400 uppercase">Entregas</span>
+                            </div>
+                            <h3 class="text-3xl font-bold text-slate-800">{{ specialistsList.reduce((acc, s) => acc + (s.report_count || 0), 0) }}</h3>
+                            <p class="text-sm text-slate-500">Relatórios Enviados</p>
+                        </div>
+                    </div>
+
+                    <!-- Detailed Status Table & Chart -->
+                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        <!-- Table -->
+                        <div class="lg:col-span-2 bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                            <div class="p-6 border-b border-slate-100 flex justify-between items-center">
+                                <h3 class="font-bold text-slate-800">Status dos Especialistas</h3>
+                                <button @click="fetchSpecialists" class="text-brand hover:text-brandDark text-sm font-bold"><i class="fa-solid fa-sync mr-1"></i> Atualizar</button>
+                            </div>
+                            <table class="w-full text-sm text-left">
+                                <thead class="bg-slate-50 text-xs text-slate-500 uppercase border-b border-slate-200">
+                                    <tr>
+                                        <th class="px-6 py-3">Especialista</th>
+                                        <th class="px-6 py-3">Especialidade</th>
+                                        <th class="px-6 py-3 text-center">Relatórios</th>
+                                        <th class="px-6 py-3 text-center">Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-slate-100">
+                                    <tr v-if="specialistsList.length === 0">
+                                        <td colspan="4" class="px-6 py-8 text-center text-slate-400 italic">Nenhum especialista encontrado.</td>
+                                    </tr>
+                                    <tr v-for="spec in specialistsList" :key="spec.id" class="hover:bg-slate-50">
+                                        <td class="px-6 py-4 font-bold text-slate-700">{{ spec.name }}</td>
+                                        <td class="px-6 py-4 text-slate-600">{{ spec.specialty }}</td>
+                                        <td class="px-6 py-4 text-center">
+                                            <span class="bg-green-50 text-green-600 px-2 py-1 rounded text-xs font-bold">{{ spec.report_count || 0 }}</span>
+                                            <button @click="viewSpecialistReports(spec)" class="text-brand hover:text-brandDark font-bold text-xs ml-2" title="Ver Relatórios"><i class="fa-solid fa-eye"></i></button>
+                                        </td>
+                                        <td class="px-6 py-4 text-center">
+                                            <span v-if="(spec.report_count || 0) > 0" class="text-xs font-bold text-green-500"><i class="fa-solid fa-check-circle mr-1"></i> Ativo</span>
+                                            <span v-else class="text-xs font-bold text-slate-400"><i class="fa-solid fa-clock mr-1"></i> Pendente</span>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <!-- Chart -->
+                        <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-6 flex flex-col">
+                            <h3 class="font-bold text-slate-800 mb-4">Relatórios por Especialidade</h3>
+                            <div class="flex-grow relative min-h-[250px]">
+                                <canvas id="specialistChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- TAB: TEAMS (GESTÃO DE GRUPOS) -->
+                <div v-show="adminTab === 'teams'" class="animate-fade-in-up space-y-6">
+                    <!-- Header -->
+                    <div class="bg-indigo-50 border border-indigo-100 rounded-xl p-4 text-sm text-indigo-800 flex gap-3">
+                        <i class="fa-solid fa-layer-group mt-0.5"></i>
+                        <div>
+                            <strong>Gestão de Grupos de Trabalho:</strong>
+                            Crie grupos dentro do Edital selecionado e atribua Instituições (Membros) e Especialistas (Supervisores).
+                        </div>
+                    </div>
+
+                    <!-- Seletor de Edital (Sidebar/Lista) -->
+                    <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
+                        <!-- Coluna 1: Lista de Editais -->
+                        <div class="lg:col-span-1 space-y-4">
+                            <h3 class="font-bold text-slate-700 text-sm uppercase tracking-wide mb-2">Editais Disponíveis</h3>
+                            <div class="space-y-2">
+                                <div v-for="form in formsList" :key="form.id" 
+                                     @click="currentFormId = form.id; fetchEditalGroups()"
+                                     class="p-3 rounded-lg border cursor-pointer transition-all"
+                                     :class="currentFormId === form.id ? 'bg-indigo-50 border-indigo-200 ring-1 ring-indigo-200' : 'bg-white border-slate-200 hover:border-indigo-200 hover:bg-slate-50'">
+                                    <div class="font-bold text-sm text-slate-800">{{ form.title }}</div>
+                                    <div class="text-xs text-slate-400 mt-1">{{ form.category || 'Geral' }}</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Coluna 2: Gestão do Edital Selecionado -->
+                        <div class="lg:col-span-3 space-y-6">
+                            <div v-if="!currentFormId" class="text-center py-12 text-slate-400 border-2 border-dashed border-slate-200 rounded-xl bg-slate-50">
+                                <i class="fa-solid fa-arrow-left text-3xl mb-3 opacity-50"></i>
+                                <p>Selecione um Edital ao lado para gerenciar seus grupos.</p>
+                            </div>
+
+                            <div v-else class="animate-fade-in">
+                                <!-- Criar Novo Grupo -->
+                                <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-6">
+                                    <h3 class="font-bold text-slate-800 mb-4 border-b pb-2">Novo Grupo em: <span class="text-indigo-600">{{ formsList.find(f => f.id === currentFormId)?.title }}</span></h3>
+                                    <div class="flex gap-3 items-end">
+                                        <div class="flex-grow">
+                                            <label class="block text-xs font-bold text-slate-500 mb-1.5 uppercase">Nome do Grupo</label>
+                                            <input v-model="newEditalGroup.name" type="text" placeholder="Ex: Grupo 1 - Norte" class="w-full px-3 py-2 border rounded-lg text-sm focus:border-brand outline-none">
+                                        </div>
+                                        <button @click="createEditalGroup" :disabled="!newEditalGroup.name" class="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold py-2 px-6 rounded-lg shadow-lg shadow-indigo-600/20 transition h-[38px]">
+                                            <i class="fa-solid fa-plus mr-1"></i> Criar
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <!-- Filtro de Grupos -->
+                                <div v-if="editalGroups.length > 0" class="mb-4 flex justify-between items-center">
+                                    <h3 class="font-bold text-slate-700 text-sm uppercase tracking-wide">Grupos Existentes ({{ editalGroups.length }})</h3>
+                                    <input v-model="editalGroupFilter" type="text" placeholder="Filtrar grupos..." class="px-3 py-1.5 border rounded-lg text-xs outline-none focus:border-brand">
+                                </div>
+
+                                <!-- Lista de Grupos -->
+                                <div class="space-y-6">
+                                    <div v-if="editalGroups.length === 0" class="text-center py-8 text-slate-400 border-2 border-dashed border-slate-200 rounded-xl">
+                                        <p>Nenhum grupo criado para este edital.</p>
+                                    </div>
+
+                                    <div v-for="group in editalGroups.filter(g => !editalGroupFilter || g.name.toLowerCase().includes(editalGroupFilter.toLowerCase()))" :key="group.id" class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                                        <div class="bg-slate-50 px-6 py-4 border-b border-slate-100 flex justify-between items-center">
+                                            <h3 class="font-bold text-slate-800">{{ group.name }}</h3>
+                                            <div class="flex items-center gap-2">
+                                                <span class="text-xs font-bold text-slate-400 mr-2">ID: {{ group.id }}</span>
+                                                <button @click="updateEditalGroup(group)" class="text-slate-400 hover:text-brand p-1 rounded transition" title="Renomear Grupo"><i class="fa-solid fa-pen"></i></button>
+                                                <button @click="deleteEditalGroup(group)" class="text-slate-400 hover:text-red-500 p-1 rounded transition" title="Excluir Grupo"><i class="fa-solid fa-trash"></i></button>
+                                            </div>
+                                        </div>
+                                        
+                                        <div class="p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+                                            <!-- Membros (ICTs) -->
+                                            <div>
+                                                <h4 class="text-xs font-bold text-slate-500 uppercase mb-3 flex justify-between items-center">
+                                                    Membros (ICTs)
+                                                    <span class="bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full text-[10px]">{{ group.members ? group.members.length : 0 }}</span>
+                                                </h4>
+                                                
+                                                <!-- Adicionar Membro -->
+                                                <div class="flex gap-2 mb-3">
+                                                    <select v-model="newGroupMember[group.id]" class="flex-grow px-2 py-1.5 border rounded text-xs outline-none bg-white">
+                                                        <option :value="null">Adicionar Membro...</option>
+                                                        <option v-for="opt in availableGroupMembers" :key="opt.name" :value="opt">
+                                                            {{ opt.name }}
+                                                        </option>
+                                                    </select>
+                                                    <button @click="addEditalGroupMember(group.id)" :disabled="!newGroupMember[group.id]" class="bg-slate-800 text-white px-3 rounded text-xs font-bold hover:bg-black transition"><i class="fa-solid fa-plus"></i></button>
+                                                </div>
+
+                                                <ul class="space-y-1 max-h-40 overflow-y-auto">
+                                                    <li v-for="member in group.members" :key="member.id" class="text-xs text-slate-600 bg-slate-50 px-2 py-1.5 rounded border border-slate-100 flex justify-between items-center group/item">
+                                                        <span>
+                                                            {{ member.name }}
+                                                            <span v-if="member.campus" class="text-[10px] text-slate-400 ml-1">({{ member.campus }})</span>
+                                                        </span>
+                                                        <button @click="removeGroupMemberByIds(group.id, member.id)" class="text-slate-300 hover:text-red-500 opacity-0 group-hover/item:opacity-100 transition"><i class="fa-solid fa-times"></i></button>
+                                                    </li>
+                                                    <li v-if="!group.members || group.members.length === 0" class="text-xs text-slate-400 italic">Nenhum membro.</li>
+                                                </ul>
+                                            </div>
+
+                                            <!-- Supervisores (Especialistas) -->
+                                            <div>
+                                                <h4 class="text-xs font-bold text-slate-500 uppercase mb-3 flex justify-between items-center">
+                                                    Supervisores
+                                                    <span class="bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded-full text-[10px]">{{ group.supervisors ? group.supervisors.length : 0 }}</span>
+                                                </h4>
+
+                                                <!-- Adicionar Supervisor -->
+                                                <div class="flex gap-2 mb-3">
+                                                    <select v-model="newGroupSupervisor[group.id]" class="flex-grow px-2 py-1.5 border rounded text-xs outline-none bg-white">
+                                                        <option :value="null">Adicionar Especialista...</option>
+                                                        <option v-for="spec in specialistsList" :key="spec.id" :value="spec.id">{{ spec.name }}</option>
+                                                    </select>
+                                                    <button @click="addEditalGroupSupervisor(group.id)" :disabled="!newGroupSupervisor[group.id]" class="bg-indigo-600 text-white px-3 rounded text-xs font-bold hover:bg-indigo-700 transition"><i class="fa-solid fa-plus"></i></button>
+                                                </div>
+
+                                                <ul class="space-y-1 max-h-40 overflow-y-auto">
+                                                    <li v-for="sup in group.supervisors" :key="sup.id" class="text-xs text-indigo-800 bg-indigo-50 px-2 py-1.5 rounded border border-indigo-100 flex justify-between items-center group/item">
+                                                        {{ sup.name }}
+                                                        <button @click="removeGroupSupervisorByIds(group.id, sup.id)" class="text-indigo-300 hover:text-red-500 opacity-0 group-hover/item:opacity-100 transition"><i class="fa-solid fa-times"></i></button>
+                                                    </li>
+                                                    <li v-if="!group.supervisors || group.supervisors.length === 0" class="text-xs text-slate-400 italic">Nenhum supervisor.</li>
+                                                </ul>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+
+
+                <!-- TAB: DOCUMENTS -->
+                <div v-show="adminTab === 'documents'" class="space-y-6 animate-fade-in-up">
+                    <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                        <div class="p-6 border-b border-slate-100 flex justify-between items-center">
+                            <h3 class="font-bold text-slate-800">Documentos Recebidos</h3>
+                            <button @click="fetchAdminDocuments" class="text-brand hover:text-brandDark text-sm font-bold"><i class="fa-solid fa-sync mr-1"></i> Atualizar</button>
+                        </div>
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left text-sm">
+                                <thead class="bg-slate-50 text-slate-500 font-bold uppercase text-xs">
+                                    <tr>
+                                        <th class="px-6 py-3">ICT</th>
+                                        <th class="px-6 py-3">Documento</th>
+                                        <th class="px-6 py-3">Tipo</th>
+                                        <th class="px-6 py-3">Data</th>
+                                        <th class="px-6 py-3 text-right">Ações</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-slate-100">
+                                    <tr v-if="adminDocuments.length === 0">
+                                        <td colspan="5" class="px-6 py-8 text-center text-slate-400 italic">Nenhum documento encontrado.</td>
+                                    </tr>
+                                    <tr v-for="doc in adminDocuments" :key="doc.id" class="hover:bg-slate-50 transition">
+                                        <td class="px-6 py-3 font-medium text-slate-700">{{ doc.ict_name }}</td>
+                                        <td class="px-6 py-3 text-slate-600">{{ doc.name }}</td>
+                                        <td class="px-6 py-3 text-slate-400 text-xs uppercase">{{ doc.file_type || 'N/A' }}</td>
+                                        <td class="px-6 py-3 text-slate-500 text-xs">{{ new Date(doc.created_at).toLocaleString('pt-BR') }}</td>
+                                        <td class="px-6 py-3 text-right">
+                                            <a :href="doc.file_path" target="_blank" class="text-brand hover:text-brandDark font-bold text-xs bg-brand/10 px-2 py-1 rounded transition">Baixar</a>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- TAB: CONFIG -->
+                <div v-show="adminTab === 'config'" class="animate-fade-in-up">
+                    <div class="bg-white rounded-2xl shadow-sm p-8 border border-slate-200">
+                        <div class="mb-6 pb-6 border-b border-slate-100">
+                            <div class="flex items-center gap-3 mb-2">
+                                <div class="w-10 h-10 rounded-full bg-green-100 text-green-600 flex items-center justify-center"><i class="fa-solid fa-file-excel"></i></div>
+                                <h3 class="text-lg font-bold text-slate-800">Importação de Dados de ICTs e Campi</h3>
+                            </div>
+                            <p class="text-sm text-slate-500 ml-13">Copie as 3 colunas (SIGLA | NOME COMPLETO | CAMPUS) do Excel/Sheets e cole abaixo para atualizar a base de dados do formulário.</p>
+                        </div>
+
+                        <textarea 
+                            v-model="importText"
+                            rows="10" 
+                            class="w-full p-4 border-2 border-dashed border-slate-200 rounded-xl font-mono text-xs focus:border-brand outline-none transition"
+                            placeholder="Exemplo:&#10;IFSP	Instituto Federal de São Paulo	Campus São Paulo&#10;IFSP	Instituto Federal de São Paulo	Campus Pirituba..."
+                        ></textarea>
+
+                        <div class="flex justify-between items-center mt-6">
+                            <div class="text-xs text-slate-500 font-medium">
+                                <span v-if="allIcts.length > 0"><i class="fa-solid fa-database mr-1"></i> Base Atual: {{ allIcts.length }} ICTs / {{ allCampi.length }} Campi</span>
+                            </div>
+                            <button @click="processImport" class="bg-green-600 hover:bg-green-700 text-white font-bold py-2.5 px-6 rounded-lg text-sm transition shadow-lg shadow-green-600/20 flex items-center gap-2">
+                                <i class="fa-solid fa-save"></i> Salvar na Nuvem
+                            </button>
+                        </div>
+                        
+                        <transition name="fade">
+                            <div v-if="importMessage" :class="importError ? 'bg-red-50 text-red-600 border-red-100' : 'bg-green-50 text-green-600 border-green-100'" class="mt-4 p-3 rounded-lg text-sm font-bold border text-center">
+                                {{ importMessage }}
+                            </div>
+                        </transition>
+                    </div>
+
+                    <!-- Importação de Eventos -->
+                    <div class="bg-white rounded-2xl shadow-sm p-8 border border-slate-200 mt-6">
+                        <div class="mb-6 pb-6 border-b border-slate-100">
+                            <div class="flex items-center gap-3 mb-2">
+                                <div class="w-10 h-10 rounded-full bg-purple-100 text-purple-600 flex items-center justify-center"><i class="fa-solid fa-calendar-plus"></i></div>
+                                <h3 class="text-lg font-bold text-slate-800">Importação de Eventos/Períodos</h3>
+                            </div>
+                            <p class="text-sm text-slate-500 ml-13">Copie as 5 colunas (ICT | CAMPUS | CATEGORIA | INÍCIO | FIM) do Excel e cole abaixo.</p>
+                            <p class="text-xs text-slate-400 ml-13 mt-1"><i class="fa-solid fa-info-circle"></i> O sistema tentará identificar ICTs e Campi mesmo com nomes incompletos. Novas categorias serão criadas automaticamente.</p>
+                        </div>
+
+                        <textarea 
+                            v-model="importEventsText"
+                            rows="10" 
+                            class="w-full p-4 border-2 border-dashed border-slate-200 rounded-xl font-mono text-xs focus:border-brand outline-none transition"
+                            placeholder="Exemplo:&#10;IFSP	Campus São Paulo	Feriado	01/01/2025	01/01/2025&#10;IFRJ	Todos	Greve	10/03/2025	20/03/2025..."
+                        ></textarea>
+
+                        <div class="flex justify-end items-center mt-6">
+                            <button @click="processEventsImport" class="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2.5 px-6 rounded-lg text-sm transition shadow-lg shadow-purple-600/20 flex items-center gap-2">
+                                <i class="fa-solid fa-file-import"></i> Importar Eventos
+                            </button>
+                        </div>
+                        
+                        <transition name="fade">
+                            <div v-if="importEventsMessage" :class="importEventsError ? 'bg-red-50 text-red-600 border-red-100' : 'bg-green-50 text-green-600 border-green-100'" class="mt-4 p-3 rounded-lg text-sm font-bold border text-center whitespace-pre-line">
+                                {{ importEventsMessage }}
+                            </div>
+                        </transition>
+                    </div>
+                </div>
+
+                </div> <!-- Fim do v-else (Conteúdo dos Módulos) -->
+
+            </main>
+        </div>
+
+        <!-- MODAL: EDIÇÃO ADMIN -->
+        <transition name="fade">
+            <div v-if="showAdminEditModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+                <div class="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col animate-fade-in-up">
+                    <div class="px-8 py-5 border-b border-slate-100 flex justify-between items-center bg-slate-50 rounded-t-2xl">
+                        <div>
+                            <h3 class="text-lg font-bold text-slate-800">Editar Cronograma</h3>
+                            <p class="text-xs text-slate-500">Editando: {{ adminEditingIct?.ict }}</p>
+                        </div>
+                        <button @click="showAdminEditModal = false" class="text-slate-400 hover:text-red-500"><i class="fa-solid fa-times"></i></button>
+                    </div>
+                    
+                    <div class="p-8 overflow-y-auto flex-grow">
+                        <div class="bg-yellow-50 text-yellow-800 p-3 rounded-lg text-sm mb-4 border border-yellow-100">
+                            <i class="fa-solid fa-triangle-exclamation mr-1"></i> Você está editando como Administrador. As alterações sobrescrevem os dados do usuário.
+                        </div>
+
+                        <table class="w-full text-sm text-left">
+                            <thead class="text-xs text-slate-500 uppercase bg-slate-100">
+                                <tr>
+                                    <th class="px-4 py-2">Campus</th>
+                                    <th class="px-2 py-2 text-center">Recesso (Ini/Fim)</th>
+                                    <th class="px-2 py-2 text-center">Férias (Ini/Fim)</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr v-for="campus in adminEditingIct?.campi" :key="campus.id" class="border-b last:border-0">
+                                    <td class="px-4 py-3 font-medium">{{ campus.name }}</td>
+                                    <td class="px-2 py-3 bg-orange-50/10 text-center">
+                                        <div class="flex gap-1 justify-center">
+                                            <input type="date" v-model="editSchedules[campus.id].recessStart" class="w-28 p-1 text-xs border rounded">
+                                            <input type="date" v-model="editSchedules[campus.id].recessEnd" class="w-28 p-1 text-xs border rounded">
+                                        </div>
+                                    </td>
+                                    <td class="px-2 py-3 bg-blue-50/10 text-center">
+                                        <div class="flex gap-1 justify-center">
+                                            <input type="date" v-model="editSchedules[campus.id].vacStart" class="w-28 p-1 text-xs border rounded">
+                                            <input type="date" v-model="editSchedules[campus.id].vacEnd" class="w-28 p-1 text-xs border rounded">
+                                        </div>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div class="px-8 py-5 border-t border-slate-100 bg-slate-50 rounded-b-2xl flex justify-end gap-3">
+                        <button @click="showAdminEditModal = false" class="px-5 py-2 rounded-lg text-slate-500 font-bold hover:bg-slate-200">Cancelar</button>
+                        <button @click="saveAdminEdits" class="px-6 py-2 bg-brand hover:bg-brandDark text-white rounded-lg font-bold shadow-lg transition">
+                            <i class="fa-solid fa-save"></i> Salvar Edição
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </transition>
+
+        <!-- MODAL: Detalhes do Dia -->
+        <transition name="fade">
+            <div v-if="showDayModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm" @click.self="showDayModal = false">
+                <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden animate-fade-in-up">
+                    <div class="bg-slate-50 px-6 py-4 border-b border-slate-100 flex justify-between items-center">
+                        <h3 class="font-bold text-lg text-slate-800">{{ selectedDay.dateFmt }}</h3>
+                        <button @click="showDayModal = false" class="text-slate-400 hover:text-red-500"><i class="fa-solid fa-times"></i></button>
+                    </div>
+                    <div class="p-6 max-h-[60vh] overflow-y-auto">
+                        <div v-if="selectedDay.unavailableItems && selectedDay.unavailableItems.length > 0">
+                            <p class="text-sm font-bold text-slate-600 mb-2">
+                                {{ calendarViewMode === 'ict' ? 'ICTs' : 'Campi' }} Indisponíveis 
+                                ({{ selectedDay.unavailableItems.length }} de {{ selectedDay.stats.total }})
+                            </p>
+                            <ul class="space-y-2">
+                                <li v-for="item in selectedDay.unavailableItems" :key="item.name" class="bg-slate-50 p-3 rounded-lg text-sm">
+                                    <p class="font-semibold text-slate-700">{{ item.name }}</p>
+                                    <p class="text-xs text-red-600 font-bold mt-1">{{ item.reason }}</p>
+                                </li>
+                            </ul>
+                        </div>
+                        <div v-else class="text-center text-slate-400 py-8">
+                            <i class="fa-solid fa-check-circle text-3xl text-green-500 mb-2"></i>
+                            <p>Todos(as) {{ calendarViewMode === 'ict' ? 'as ICTs' : 'os Campi' }} estão disponíveis neste dia.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </transition>
+
+        <!-- MODAL: Novo Evento (Admin Wizard) -->
+        <transition name="fade">
+            <div v-if="showEventModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm" @click.self="closeEventModal">
+                <div class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden animate-fade-in-up max-h-[90vh] flex flex-col">
+                    <div class="px-6 py-4 bg-slate-50 border-b border-slate-200 flex justify-between items-center">
+                        <h3 class="font-bold text-lg text-slate-800">{{ editingEventIndex === null ? 'Criar Novo Evento' : 'Editar Evento' }}</h3>
+                        <button @click="closeEventModal" class="text-slate-400 hover:text-red-500"><i class="fa-solid fa-times"></i></button>
+                    </div>
+                    <div class="p-6 space-y-5 overflow-y-auto">
+                        <!-- Seleção de Escopo (Wizard Style) -->
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <!-- ICT Selection -->
+                            <div class="relative group">
+                                <label class="block text-xs font-bold text-slate-500 mb-1.5 flex justify-between">
+                                    Instituição (ICT)
+                                    <button v-if="wizardSelectedIcts.length > 0" @click="wizardSelectedIcts = []; wizardSelectedCampi = []" class="text-[10px] text-red-500 hover:underline">Limpar</button>
+                                </label>
+                                <div class="min-h-[42px] w-full px-3 py-2 border rounded-lg text-sm focus-within:border-brand bg-white flex flex-wrap gap-2 items-center transition-colors">
+                                    <!-- Pills -->
+                                    <span v-for="(ict, idx) in wizardSelectedIcts" :key="idx" class="bg-slate-100 text-slate-700 px-2 py-1 rounded text-xs font-bold flex items-center gap-1 border border-slate-200">
+                                        {{ ict === 'ALL' ? 'Todas as Instituições' : ict.ictName }}
+                                        <button @click.stop="removeWizardIct(idx)" class="hover:text-red-500 w-4 h-4 flex items-center justify-center rounded-full hover:bg-slate-200 transition"><i class="fa-solid fa-times text-[10px]"></i></button>
+                                    </span>
+                                    <!-- Input -->
+                                    <input 
+                                        v-if="!wizardSelectedIcts.includes('ALL')"
+                                        id="ictSearchInput_modal"
+                                        type="text" 
+                                        v-model="ictSearch" 
+                                        @focus="showIctDropdown = true"
+                                        placeholder="Buscar..." 
+                                        class="flex-grow outline-none min-w-[80px] bg-transparent"
+                                    >
+                                </div>
+                                <div v-if="showIctDropdown && wizardIctOptions.length > 0" class="absolute z-20 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-48 overflow-y-auto animate-fade-in">
+                                    <div 
+                                        v-for="opt in wizardIctOptions" 
+                                        :key="opt === 'ALL' ? 'ALL' : opt.ictName"
+                                        @click="selectWizardIct(opt, 'ictSearchInput_modal')"
+                                        class="px-3 py-2 hover:bg-slate-50 cursor-pointer text-sm text-slate-700 border-b border-slate-50 last:border-0"
+                                    >
+                                        {{ opt === 'ALL' ? 'Todas as Instituições' : opt.ictName }}
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Campus Selection -->
+                            <div class="relative group">
+                                <label class="block text-xs font-bold text-slate-500 mb-1.5 flex justify-between">
+                                    Campus
+                                    <button v-if="wizardSelectedCampi.length > 0" @click="wizardSelectedCampi = []" class="text-[10px] text-red-500 hover:underline">Limpar</button>
+                                </label>
+                                <div class="min-h-[42px] w-full px-3 py-2 border rounded-lg text-sm focus-within:border-brand bg-white flex flex-wrap gap-2 items-center transition-colors" :class="{'bg-slate-50': wizardSelectedIcts.length === 0 || (wizardSelectedIcts.length > 0 && wizardSelectedIcts[0] === 'ALL')}">
+                                    <!-- Pills -->
+                                    <span v-for="(campus, idx) in wizardSelectedCampi" :key="idx" class="bg-slate-100 text-slate-700 px-2 py-1 rounded text-xs font-bold flex items-center gap-1 border border-slate-200">
+                                        {{ campus.name }}
+                                        <button @click.stop="removeWizardCampus(idx)" class="hover:text-red-500 w-4 h-4 flex items-center justify-center rounded-full hover:bg-slate-200 transition"><i class="fa-solid fa-times text-[10px]"></i></button>
+                                    </span>
+                                    <!-- Input -->
+                                    <input 
+                                        v-if="!wizardSelectedCampi.includes('ALL')"
+                                        id="campusSearchInput_modal"
+                                        type="text" 
+                                        v-model="campusSearch" 
+                                        @focus="showCampusDropdown = true"
+                                        :disabled="wizardSelectedIcts.length === 0 || (wizardSelectedIcts.length > 0 && wizardSelectedIcts[0] === 'ALL')"
+                                        :placeholder="(wizardSelectedIcts.length === 0 || (wizardSelectedIcts.length > 0 && wizardSelectedIcts[0] === 'ALL')) ? 'Selecione uma ICT específica' : 'Buscar...'" 
+                                        class="flex-grow outline-none min-w-[80px] bg-transparent disabled:text-slate-400"
+                                    >
+                                </div>
+                                <div v-if="showCampusDropdown && wizardCampusOptions.length > 0" class="absolute z-20 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-48 overflow-y-auto animate-fade-in">
+                                    <div 
+                                        v-for="opt in wizardCampusOptions" 
+                                        :key="opt === 'ALL' ? 'ALL' : opt.id"
+                                        @click="selectWizardCampus(opt, 'campusSearchInput_modal')"
+                                        class="px-3 py-2 hover:bg-slate-50 cursor-pointer text-sm text-slate-700 border-b border-slate-50 last:border-0"
+                                    >
+                                        {{ opt === 'ALL' ? 'Todos os Campi' : opt.name }}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Categoria e Datas -->
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div>
+                                <label class="block text-xs font-bold text-slate-500 mb-1.5 flex justify-between">
+                                    Categoria 
+                                    <button @click="showCategoryModal = true" class="text-[10px] text-brand hover:underline">+ Nova</button>
+                                </label>
+                                <div class="relative">
+                                    <select v-model="eventForm.category" class="w-full px-3 py-2 border rounded-lg text-sm focus:border-brand outline-none bg-white appearance-none cursor-pointer">
+                                        <option v-for="(color, cat) in categoryColors" :key="cat" :value="cat">{{ cat }}</option>
+                                    </select>
+                                    <i class="fa-solid fa-chevron-down absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs pointer-events-none"></i>
+                                </div>
+                            </div>
+                            <div><label class="block text-xs font-bold text-slate-500 mb-1.5">Início</label><input v-model="eventForm.start" type="date" class="w-full px-3 py-2 border rounded-lg text-sm focus:border-brand outline-none"></div>
+                            <div><label class="block text-xs font-bold text-slate-500 mb-1.5">Fim</label><input v-model="eventForm.end" :min="eventForm.start" type="date" class="w-full px-3 py-2 border rounded-lg text-sm focus:border-brand outline-none"></div>
+                        </div>
+
+                        <!-- Modal de Nova Categoria (Inline) -->
+                        <div v-if="showCategoryModal" class="flex items-center gap-2 bg-slate-50 p-2 rounded-lg border border-slate-200 animate-fade-in">
+                            <input v-model="newCategoryName" type="text" placeholder="Nome da Categoria" class="text-xs px-2 py-1 rounded border">
+                            <input v-model="newCategoryColor" type="color" class="h-6 w-6 cursor-pointer">
+                            <button @click="addCustomCategory" class="text-xs bg-green-500 text-white px-2 py-1 rounded hover:bg-green-600">Salvar</button>
+                            <button @click="showCategoryModal = false" class="text-xs text-slate-400 hover:text-slate-600"><i class="fa-solid fa-times"></i></button>
+                        </div>
+
+                        <div class="pt-4 border-t border-slate-100 flex justify-end">
+                            <button @click="submitEvent" class="bg-brand hover:bg-brandDark text-white font-bold py-2.5 px-6 rounded-lg text-sm transition shadow-lg">
+                                {{ editingEventIndex === null ? 'Adicionar Evento' : 'Salvar Alterações' }}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </transition>
+
+        <!-- MODAL: Novo Canal (Chat) -->
+        <transition name="fade">
+            <div v-if="showNewChannelModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm" @click.self="showNewChannelModal = false">
+                <div class="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden animate-fade-in-up">
+                    <div class="px-6 py-4 bg-slate-50 border-b border-slate-200 flex justify-between items-center">
+                        <h3 class="font-bold text-lg text-slate-800">Novo Canal</h3>
+                        <button @click="showNewChannelModal = false" class="text-slate-400 hover:text-red-500"><i class="fa-solid fa-times"></i></button>
+                    </div>
+                    <div class="p-6 space-y-4">
+                        <div>
+                            <label class="block text-xs font-bold text-slate-500 mb-1.5">Nome do Canal</label>
+                            <input v-model="newChannel.name" type="text" placeholder="Ex: Avisos" class="w-full px-3 py-2 border rounded-lg text-sm focus:border-brand outline-none">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-slate-500 mb-1.5">Tipo</label>
+                            <select v-model="newChannel.type" class="w-full px-3 py-2 border rounded-lg text-sm focus:border-brand outline-none bg-white">
+                                <option value="general">Geral</option>
+                                <option value="help">Dúvidas</option>
+                                <option value="ideas">Sugestões</option>
+                                <option value="announcements">Comunicados</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-slate-500 mb-1.5">Descrição</label>
+                            <input v-model="newChannel.description" type="text" placeholder="Breve descrição..." class="w-full px-3 py-2 border rounded-lg text-sm focus:border-brand outline-none">
+                        </div>
+                        <button @click="createChannel" class="w-full bg-brand hover:bg-brandDark text-white font-bold py-2.5 rounded-lg shadow-lg shadow-brand/20 transition">
+                            Criar Canal
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </transition>
+
+        <!-- MODAL: Novo/Editar Formulário -->
+        <transition name="fade">
+            <div v-if="showFormModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm" @click.self="showFormModal = false">
+                <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-fade-in-up">
+                    <div class="px-6 py-4 bg-slate-50 border-b border-slate-200 flex justify-between items-center">
+                        <h3 class="font-bold text-lg text-slate-800">{{ newForm.id ? 'Editar Formulário' : 'Criar Novo Formulário' }}</h3>
+                        <button @click="showFormModal = false" class="text-slate-400 hover:text-red-500"><i class="fa-solid fa-times"></i></button>
+                    </div>
+                    <div class="p-6 space-y-4">
+                        <div>
+                            <label class="block text-xs font-bold text-slate-500 mb-1.5">Título do Formulário</label>
+                            <input v-model="newForm.title" type="text" placeholder="Ex: Adesão 2025" class="w-full px-3 py-2 border rounded-lg text-sm focus:border-brand outline-none">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-slate-500 mb-1.5">Categoria</label>
+                            <select v-model="newForm.category" class="w-full px-3 py-2 border rounded-lg text-sm focus:border-brand outline-none bg-white">
+                                <option value="Edital">Edital</option>
+                                <option value="Pesquisa">Pesquisa</option>
+                                <option value="Evento">Evento</option>
+                                <option value="Outro">Outro</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-slate-500 mb-1.5">Texto de Destaque (Badge)</label>
+                            <input v-model="newForm.badge_text" type="text" placeholder="Ex: Novo, 2025, Urgente" class="w-full px-3 py-2 border rounded-lg text-sm focus:border-brand outline-none">
+                        </div>
+                        
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-xs font-bold text-slate-500 mb-1.5">Data de Início</label>
+                                <input v-model="newForm.start_date" type="date" class="w-full px-3 py-2 border rounded-lg text-sm focus:border-brand outline-none">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-bold text-slate-500 mb-1.5">Data de Fim</label>
+                                <input v-model="newForm.end_date" type="date" class="w-full px-3 py-2 border rounded-lg text-sm focus:border-brand outline-none">
+                            </div>
+                        </div>
+
+                        <div>
+                            <label class="block text-xs font-bold text-slate-500 mb-1.5">Descrição (Opcional)</label>
+                            <textarea v-model="newForm.description" rows="3" placeholder="Descrição breve..." class="w-full px-3 py-2 border rounded-lg text-sm focus:border-brand outline-none"></textarea>
+                        </div>
+
+                        <!-- Document Management Section -->
+                        <div class="border-t border-slate-200 pt-4 mt-4">
+                            <label class="block text-xs font-bold text-slate-500 mb-2">Documentos e Anexos</label>
+                            
+                            <!-- List of existing documents -->
+                            <div v-if="newForm.documents && newForm.documents.length > 0" class="space-y-2 mb-4">
+                                <div v-for="(doc, index) in newForm.documents" :key="index" class="flex items-center justify-between bg-slate-50 p-2 rounded border border-slate-200 text-xs">
+                                    <div class="flex items-center gap-2 overflow-hidden">
+                                        <i class="fa-solid fa-file-pdf text-red-500"></i>
+                                        <span class="font-bold truncate">{{ doc.name }}</span>
+                                        <span class="text-slate-400 text-[10px] border border-slate-200 px-1 rounded">{{ doc.type }}</span>
+                                    </div>
+                                    <button @click="removeDocument(index)" class="text-slate-400 hover:text-red-500 p-1"><i class="fa-solid fa-trash"></i></button>
+                                </div>
+                            </div>
+
+                            <!-- Add new document -->
+                            <div class="bg-slate-50 p-3 rounded-lg border border-slate-200">
+                                <div class="grid grid-cols-1 gap-2 mb-2">
+                                    <input v-model="newDoc.name" type="text" placeholder="Nome do Documento (Ex: Edital 01/2025)" class="w-full px-2 py-1.5 border rounded text-xs focus:border-brand outline-none">
+                                    <input v-model="newDoc.url" type="text" placeholder="URL do PDF" class="w-full px-2 py-1.5 border rounded text-xs focus:border-brand outline-none">
+                                </div>
+                                <div class="flex gap-2">
+                                    <select v-model="newDoc.type" class="flex-grow px-2 py-1.5 border rounded text-xs focus:border-brand outline-none bg-white">
+                                        <option value="Edital">Edital</option>
+                                        <option value="Retificação">Retificação</option>
+                                        <option value="Anexo">Anexo</option>
+                                        <option value="Resultado">Resultado</option>
+                                        <option value="Outro">Outro</option>
+                                    </select>
+                                    <button @click="addDocument" class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold px-3 py-1.5 rounded text-xs transition">Adicionar</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="pt-4 flex justify-end">
+                            <button @click="saveForm" class="bg-brand hover:bg-brandDark text-white font-bold py-2.5 px-6 rounded-lg text-sm transition shadow-lg w-full">
+                                {{ newForm.id ? 'Salvar Alterações' : 'Criar Formulário' }}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </transition>
+
+        <!-- MODAL: Novo Especialista -->
+        <transition name="fade">
+            <div v-if="showSpecialistModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm" @click.self="showSpecialistModal = false">
+                <div class="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden animate-fade-in-up">
+                    <div class="px-6 py-4 bg-slate-50 border-b border-slate-200 flex justify-between items-center">
+                        <h3 class="font-bold text-lg text-slate-800">Novo Especialista</h3>
+                        <button @click="showSpecialistModal = false" class="text-slate-400 hover:text-red-500"><i class="fa-solid fa-times"></i></button>
+                    </div>
+                    <div class="p-6 space-y-4">
+                        <div>
+                            <label class="block text-xs font-bold text-slate-500 mb-1.5">Nome Completo</label>
+                            <input v-model="newSpecialist.name" type="text" placeholder="Ex: João Silva" class="w-full px-3 py-2 border rounded-lg text-sm focus:border-brand outline-none">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-slate-500 mb-1.5">E-mail</label>
+                            <input v-model="newSpecialist.email" type="email" placeholder="Ex: joao@email.com" class="w-full px-3 py-2 border rounded-lg text-sm focus:border-brand outline-none">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-slate-500 mb-1.5">Especialidade / Área</label>
+                            <input v-model="newSpecialist.specialty" type="text" placeholder="Ex: Gestão de Projetos" class="w-full px-3 py-2 border rounded-lg text-sm focus:border-brand outline-none">
+                        </div>
+                        <button @click="createSpecialist" class="w-full bg-brand hover:bg-brandDark text-white font-bold py-2.5 rounded-lg shadow-lg shadow-brand/20 transition">
+                            Cadastrar Especialista
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </transition>
+
+        <!-- MODAL: Relatórios do Especialista -->
+        <transition name="fade">
+            <div v-if="showSpecialistReportsModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm" @click.self="showSpecialistReportsModal = false">
+                <div class="bg-white rounded-2xl shadow-2xl w-full max-w-4xl h-[80vh] flex flex-col overflow-hidden animate-fade-in-up">
+                    <div class="px-6 py-4 bg-slate-50 border-b border-slate-200 flex justify-between items-center">
+                        <div>
+                            <h3 class="font-bold text-lg text-slate-800">Relatórios: {{ selectedSpecialistName }}</h3>
+                            <p class="text-xs text-slate-500">Histórico de submissões</p>
+                        </div>
+                        <button @click="showSpecialistReportsModal = false" class="text-slate-400 hover:text-red-500"><i class="fa-solid fa-times"></i></button>
+                    </div>
+                    <div class="flex-grow overflow-y-auto p-6 bg-slate-50/50">
+                        <div v-if="currentSpecialistReports.length === 0" class="text-center py-12 text-slate-400">
+                            <i class="fa-solid fa-folder-open text-4xl mb-2 opacity-50"></i>
+                            <p>Nenhum relatório encontrado.</p>
+                        </div>
+                        <div v-else class="space-y-4">
+                            <div v-for="rep in currentSpecialistReports" :key="rep.id" class="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+                                <div class="flex justify-between items-start mb-4 border-b border-slate-100 pb-2">
+                                    <div>
+                                        <h4 class="font-bold text-slate-800">{{ rep.title }}</h4>
+                                        <p class="text-xs text-slate-500">Atualizado em: {{ new Date(rep.updated_at).toLocaleDateString('pt-BR') }}</p>
+                                    </div>
+                                    <span :class="{'bg-yellow-100 text-yellow-700': rep.status === 'draft', 'bg-green-100 text-green-700': rep.status === 'submitted'}" class="text-[10px] font-bold px-2 py-1 rounded uppercase">
+                                        {{ rep.status === 'draft' ? 'Rascunho' : 'Enviado' }}
+                                    </span>
+                                </div>
+                                
+                                <div class="space-y-4 text-sm text-slate-600">
+                                    <div v-if="rep.content.diagnostic_summary">
+                                        <p class="font-bold text-xs text-slate-400 uppercase">Resumo do Diagnóstico</p>
+                                        <p>{{ rep.content.diagnostic_summary }}</p>
+                                    </div>
+                                    <div v-if="rep.content.action_plan && rep.content.action_plan.length > 0">
+                                        <p class="font-bold text-xs text-slate-400 uppercase mt-2">Plano de Ação ({{ rep.content.action_plan.length }} itens)</p>
+                                        <ul class="list-disc list-inside pl-2">
+                                            <li v-for="(item, idx) in rep.content.action_plan" :key="idx">{{ item.action }} - {{ item.month }}</li>
+                                        </ul>
+                                    </div>
+                                    
+                                    <!-- Kanban View for Admin -->
+                                    <div v-if="rep.content.kanban_data && rep.content.kanban_data.length > 0">
+                                        <p class="font-bold text-xs text-slate-400 uppercase mt-2">Quadro Kanban ({{ rep.content.kanban_data.length }} itens)</p>
+                                        <div class="grid grid-cols-3 gap-2 mt-1">
+                                            <div class="bg-slate-50 p-2 rounded border border-slate-100">
+                                                <p class="text-[10px] font-bold text-slate-500 uppercase mb-1">A Fazer</p>
+                                                <ul class="list-disc list-inside text-xs pl-1">
+                                                    <li v-for="k in rep.content.kanban_data.filter(i => i.status === 'todo')" :key="k.id" class="truncate">{{ k.title }}</li>
+                                                </ul>
+                                            </div>
+                                            <div class="bg-blue-50 p-2 rounded border border-blue-100">
+                                                <p class="text-[10px] font-bold text-blue-500 uppercase mb-1">Em Andamento</p>
+                                                <ul class="list-disc list-inside text-xs pl-1">
+                                                    <li v-for="k in rep.content.kanban_data.filter(i => i.status === 'doing')" :key="k.id" class="truncate">{{ k.title }}</li>
+                                                </ul>
+                                            </div>
+                                            <div class="bg-green-50 p-2 rounded border border-green-100">
+                                                <p class="text-[10px] font-bold text-green-500 uppercase mb-1">Concluído</p>
+                                                <ul class="list-disc list-inside text-xs pl-1">
+                                                    <li v-for="k in rep.content.kanban_data.filter(i => i.status === 'done')" :key="k.id" class="truncate">{{ k.title }}</li>
+                                                </ul>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div v-if="rep.content.attendance_logs && rep.content.attendance_logs.length > 0">
+                                        <p class="font-bold text-xs text-slate-400 uppercase mt-2">Atendimentos ({{ rep.content.attendance_logs.length }} registros)</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </transition>
+
+        <!-- Footer Restaurado -->
+        <footer class="mt-auto py-8 border-t border-slate-200/60 bg-white/40 backdrop-blur-sm relative z-10">
+            <div class="container mx-auto px-4 flex flex-col items-center justify-center gap-5">
+                <img 
+                    src="https://www.gov.br/transferegov/pt-br/noticias/noticias/arquivos-e-imagens/mec.png/@@images/cfa8ccbe-9bb0-4e89-8cc4-d76db9608ffd.png" 
+                    alt="Logo Parceiros" 
+                    class="h-16 md:h-20 w-auto object-contain opacity-80 hover:opacity-100 transition duration-300 mix-blend-multiply"
+                >
+                <div class="text-center">
+                    <p class="text-slate-500 text-xs font-medium tracking-wide">
+                        © 2025 Assistec Inova- Todos os direitos reservados.
+                    </p>
+                </div>
+            </div>
+        </footer>
+    </div>
+    <script src="js/admin.js"></script>
+</body>
+</html>
